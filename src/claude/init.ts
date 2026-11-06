@@ -3,7 +3,7 @@ import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { disableGraftServerIn, installClaudeGlobal, type GlobalWrite } from '../hosts/claude-global.js';
-import { mergeGraftSettings, mergeTrailShared, mergeTrailLocal } from './settings-merge.js';
+import { mergeGraftSettings, mergeTrailShared, mergeTrailLocal, statuslineWanted } from './settings-merge.js';
 import { statuslineShim, hooksShim, rememberInstall } from './shim-template.js';
 import { skillTemplate } from './skill-template.js';
 import { mergeJsonKey, serverEntry, type McpWrite } from '../hosts/mcp-config.js';
@@ -132,7 +132,7 @@ export interface InitResult {
 
 export function runInit(
   dir: string,
-  opts: { build?: boolean; cliPath?: string; statusline?: boolean; global?: boolean; home?: string; brand?: Brand } = {},
+  opts: { build?: boolean; cliPath?: string; statusline?: boolean; hooks?: boolean; global?: boolean; home?: string; brand?: Brand } = {},
 ): InitResult {
   if (wiringName(dir, opts.brand) === 'trail') return runTrailInit(dir, opts);
   // Same list `--dry-run` and the picker report, so the two can't drift apart.
@@ -193,16 +193,21 @@ function notPlainJson(file: string, what: string): string {
  */
 function runTrailInit(
   dir: string,
-  opts: { build?: boolean; cliPath?: string; statusline?: boolean; global?: boolean; home?: string },
+  opts: { build?: boolean; cliPath?: string; statusline?: boolean; hooks?: boolean; global?: boolean; home?: string },
 ): InitResult {
   const home = opts.home ?? homedir();
   const global = opts.global !== false;
+  // `--no-hooks`: a Claude Code plugin registers the hooks (`trail hooks print`), so no hook is written anywhere.
+  const hooks = opts.hooks !== false;
+  const wantStatusline = statuslineWanted(opts);
   const [settings, hook, local, statusline, skill] = claudeTargetsFor(dir, 'trail', home).map((t) => t.path);
 
   mkdirSync(dirname(hook), { recursive: true });
-  writeFileSync(hook, hooksShim()); chmodSync(hook, 0o755);
-  writeFileSync(statusline, statuslineShim()); chmodSync(statusline, 0o755);
-  ignoreInTrailDir(dir, 'statusline.cjs');
+  if (hooks) { writeFileSync(hook, hooksShim()); chmodSync(hook, 0o755); }
+  if (hooks || wantStatusline) {
+    writeFileSync(statusline, statuslineShim()); chmodSync(statusline, 0o755);
+    ignoreInTrailDir(dir, 'statusline.cjs');
+  }
   // The map and its caches (`.trail/cache/`, context/map-dir.ts) are each machine's own. Said here as well as at
   // the build: a hook or `--no-build` writes the cache there before any build adds the line.
   ignoreInTrailDir(dir, 'cache/');
@@ -210,20 +215,25 @@ function runTrailInit(
 
   // Either file, when it isn't plain JSON, is the person's and stays as it is
   // (see runInit): rewriting it would drop their own hooks and settings.
-  const existingShared = readSettings(settings);
-  if (existingShared) {
+  const existingShared = hooks ? readSettings(settings) : {};
+  if (hooks && existingShared) {
     mkdirSync(dirname(settings), { recursive: true });
     writeFileSync(settings, `${JSON.stringify(mergeTrailShared(existingShared), null, 2)}\n`);
   }
 
   // Hooks for every other event come from `~/.claude`. Only when that's off do
   // they go in the personal file, beside the status line.
-  const existingLocal = readSettings(local);
-  const { merged, warnings } = mergeTrailLocal(existingLocal ?? {}, { statusline: opts.statusline, hooks: !global });
-  if (existingLocal) writeFileSync(local, `${JSON.stringify(merged, null, 2)}\n`);
-  else warnings.push(notPlainJson('.claude/settings.local.json', "trail's status line and allowlist"));
-  if (!existingShared) warnings.unshift(notPlainJson('.claude/settings.json', "trail's session-start hook"));
-  keepOutOfGit(dir, join('.claude', 'settings.local.json'));
+  // With neither hooks nor a status line to write, no Claude Code settings file is touched at all.
+  const warnings: string[] = [];
+  if (hooks || wantStatusline) {
+    const existingLocal = readSettings(local);
+    const mergedLocal = mergeTrailLocal(existingLocal ?? {}, { statusline: opts.statusline, hooks: hooks && !global });
+    warnings.push(...mergedLocal.warnings);
+    if (existingLocal) { mkdirSync(dirname(local), { recursive: true }); writeFileSync(local, `${JSON.stringify(mergedLocal.merged, null, 2)}\n`); }
+    else warnings.push(notPlainJson('.claude/settings.local.json', "trail's status line and allowlist"));
+    if (hooks && !existingShared) warnings.unshift(notPlainJson('.claude/settings.json', "trail's session-start hook"));
+    keepOutOfGit(dir, join('.claude', 'settings.local.json'));
+  }
 
   let skillPath = '';
   if (global) {
@@ -233,9 +243,9 @@ function runTrailInit(
   }
 
   // An old settings.json left as it was still runs the old shims: they stay until it can be rewritten.
-  clearOldLayout(dir, { keepShims: !existingShared });
+  if (hooks) clearOldLayout(dir, { keepShims: !existingShared });
 
-  const globalWrites = global ? installClaudeGlobal(home, 'trail') : [];
+  const globalWrites = global && hooks ? installClaudeGlobal(home, 'trail') : [];
   // A trail repo on a machine with graft's server installed for everything:
   // graft goes off in this folder, so its tools don't show here.
   if (global) globalWrites.push(disableGraftServerIn(home, resolve(dir)));

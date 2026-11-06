@@ -20,7 +20,7 @@ import type { ProviderKind } from "./ai/llm/factory.js";
 import { formatCheckReport } from "./context/check.js";
 import { formatGraphCheckReport } from "./graph/check.js";
 import { buildGraphIfMissing, runInit } from "./claude/init.js";
-import { statuslineWanted } from "./claude/settings-merge.js";
+import { pluginHooks, statuslineWanted } from "./claude/settings-merge.js";
 import { runHostsInit } from "./hosts/init.js";
 import { codexStatusLines, codexTrustLine } from "./hosts/codex-trust.js";
 import { hostIds } from "./hosts/registry.js";
@@ -232,7 +232,7 @@ function parseTabs(raw: string | undefined): VizTab[] | undefined {
  * Commands that own the upgrade story themselves (`version`, `upgrade`) or must
  * not editorialize on stderr at startup (`mcp` runs its own upkeep at boot).
  */
-const UPKEEP_SKIP = new Set(["version", "upgrade", "mcp"]);
+const UPKEEP_SKIP = new Set(["version", "upgrade", "mcp", "hook", "hooks"]);
 
 /** Every other command: the rename and stranded-repo notices, for a person at a terminal. */
 program.hook("preAction", (_parent, action) => {
@@ -261,6 +261,30 @@ program
   .argument("[dir]", "target repo directory", ".")
   .action((dir: string) => {
     refreshBranches(resolve(dir), { prs: true });
+  });
+
+// What a Claude Code plugin's hooks run (see `hooks print`). Fails open: whatever goes wrong, the exit code is 0.
+program
+  .command("hook", { hidden: true })
+  .description("internal: run one Claude Code hook event, reading its payload on stdin; always exits 0")
+  .argument("[event]", "the hook event, like session-start, prompt, pre-bash, post-edit or stop")
+  .action(async (event?: string) => {
+    if (event) {
+      try {
+        await (await import("./claude/hooks.js")).main(event);
+      } catch {
+        /* a hook never fails the agent's turn */
+      }
+    }
+    process.exitCode = 0;
+  });
+
+grouped(program.command("hooks"), GROUP.setup)
+  .description("The hooks a Claude Code plugin registers instead of trail init")
+  .command("print")
+  .description("print, as JSON, the `hooks` object for a plugin's hooks/hooks.json: the events, matchers and timeouts trail init would register, each running `trail hook <event>`")
+  .action(() => {
+    console.log(JSON.stringify(pluginHooks(), null, 2));
   });
 
 // Hidden under trail, where -v says the same; listed under graft as it was.
@@ -992,8 +1016,8 @@ grouped(program.command("init"), GROUP.setup)
   .option("--no-agents", "Claude Code wiring only; skip other agents")
   .option("--list-agents", "list known agent ids and exit")
   .option("--no-mcp", "skip MCP server registration for other agents")
-  .option("--no-hooks", "skip hook installation for other agents")
-  .option("--no-statusline", "skip writing Claude Code statusLine (keep a user-defined one)")
+  .option("--no-hooks", "write no hooks: not for other agents, and for Claude Code no hook shim or hook entries in .claude/settings.json or ~/.claude (a plugin registers them: trail hooks print)")
+  .option("--no-statusline", "skip writing Claude Code statusLine (keep a user-defined one); with --no-hooks, no Claude Code settings file is touched")
   .option("--dry-run", "print every file init would touch, then exit without writing")
   .option("-y, --yes", "skip the picker and wire every detected agent (the pre-0.8 default)")
   .option("--no-global", "skip writes outside this repo (the ~/.codex/ config + hooks)")
@@ -1541,7 +1565,7 @@ function wireTarget(
       // writes under `~/.claude` now (hosts/claude-global.ts), so --no-global has to
       // reach it or the flag would silently mean "no out-of-repo writes, except three".
       const claudeGlobal = opts.global !== false && (!ctx.laptop || ctx.laptop.includes("claude"));
-      const res = runInit(repo, { build: opts.build, cliPath, statusline: wantStatusline, global: claudeGlobal, home, brand: brand() });
+      const res = runInit(repo, { build: opts.build, cliPath, statusline: wantStatusline, hooks: opts.hooks, global: claudeGlobal, home, brand: brand() });
       say(`✓ wrote ${res.settingsPath}`);
       for (const s of res.shims) say(`✓ wrote ${s}`);
       if (res.skill) say(`✓ wrote ${res.skill}`);

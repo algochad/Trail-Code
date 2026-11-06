@@ -5,6 +5,8 @@
  * writes, no spawning): this file is the only place that knows how to actually
  * re-run the wiring, and it is deliberately thin.
  */
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { runInit, wiringName } from './claude/init.js';
 import { runHostsInit } from './hosts/init.js';
 import { graftCliPath } from './claude/paths.js';
@@ -51,8 +53,10 @@ function rewriteWiring(repo: string, hosts: string[], opts: WiringOpts, toTrail 
   // `opts.global` reaches the claude layer for the same reason `opts.statusline` does:
   // its `~/.claude` writes (hosts/claude-global.ts) are out-of-repo, and a user who
   // declined those at init time must keep declining them on every replay.
+  // A repo set up with `trail init --no-hooks` (a plugin owns its hooks) has no shim to say it is trail's: its `.trail/` does.
+  const pluginRepo = opts.hooks === false && existsSync(join(repo, '.trail'));
   if (hosts.includes('claude'))
-    runInit(repo, { build: false, cliPath: graftCliPath(), statusline: opts.statusline, global: opts.global && (!opts.laptop || opts.laptop.includes('claude')), ...(toTrail ? { brand: 'trail' as const } : {}) });
+    runInit(repo, { build: false, cliPath: graftCliPath(), statusline: opts.statusline, hooks: opts.hooks, global: opts.global && (!opts.laptop || opts.laptop.includes('claude')), ...(toTrail || pluginRepo ? { brand: 'trail' as const } : {}) });
   // The other agents move with Claude Code: their graft-named files and
   // fenced blocks are replaced by trail's (see hosts/init.ts).
   const others = hosts.filter((h) => h !== 'claude');

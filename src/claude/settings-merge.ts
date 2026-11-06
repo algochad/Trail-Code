@@ -51,6 +51,13 @@ export function failOpen(command: string): string {
 export function trailHookCmd(arg: string): string {
   return `node "\${CLAUDE_PROJECT_DIR:-.}/.trail/hook.cjs" ${arg}`;
 }
+/**
+ * The hooks a Claude Code plugin registers in its `hooks/hooks.json` (the value of its `hooks` key): the same
+ * events, matchers and timeouts `trail init` writes into settings, each running `trail hook <event>`, which fails open.
+ */
+export function pluginHooks(): Record<string, Json[]> {
+  return hookBlocks((arg) => `trail hook ${arg}`);
+}
 function graftBlocks(helpers?: string, name: 'graft' | 'trail' = 'graft'): Record<string, Json[]> {
   return hookBlocks((arg) => hookCmd(arg, helpers, name));
 }
