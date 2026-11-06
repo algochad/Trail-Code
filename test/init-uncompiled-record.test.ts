@@ -60,7 +60,7 @@ async function run(verbose: boolean) {
     const env = { HOME: w.home, TRAIL_HOME: w.trail, PATH: bin, TRAIL_NO_FETCH: "1", DO_NOT_TRACK: "1", CLAUDECODE: "1" };
     writeFileSync(join(w.trail, "settings.json"), JSON.stringify({ v: 1, skills: "on" }));
     const said: string[] = [];
-    const { reads } = beginLookBack(w.repo, { env, deps });
+    const { reads } = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env, deps });
     await finishLookBack(w.repo, reads, { yes: false, say: (l) => said.push(l), verbose });
     const rec = readInitRecord(repoPlace(w.repo, env).key, env);
     return { said, rec, disk: texts(w.trail) };

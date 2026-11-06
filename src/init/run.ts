@@ -82,8 +82,13 @@ export interface LookBackReads {
 const AGENT_CAP_MS = 100_000;
 const PERSON_CAP_MS = 300_000;
 
-/** Start the look-back and the PR-review read; the lines to print now, before anything finishes. */
-export function beginLookBack(repo: string, opts: { env?: NodeJS.ProcessEnv; plain?: boolean; again?: boolean; pair?: boolean; deps?: PersonDeps } = {}):
+/**
+ * Start the look-back and the PR-review read; the lines to print now, before anything finishes.
+ *
+ * Reading history is opt-in: past Claude Code transcripts (and the notes Claude keeps about the repo) only with
+ * `mineSessions`, the merged PRs' review comments (through gh) only with `minePrs`. Neither is on by default.
+ */
+export function beginLookBack(repo: string, opts: { env?: NodeJS.ProcessEnv; plain?: boolean; again?: boolean; mineSessions?: boolean; minePrs?: boolean; deps?: PersonDeps } = {}):
   { reads: LookBackReads; lines: string[] } {
   const env = opts.env ?? process.env;
   const person = personAtTerminal(env, opts.deps ?? {});
@@ -91,21 +96,26 @@ export function beginLookBack(repo: string, opts: { env?: NodeJS.ProcessEnv; pla
   const plain = opts.plain === true;
   const model = !agent && mayCallClaude(env, { plain }, opts.deps ?? {}, person);
   const skills = readSettings(env).skills === 'on';
-  const memory = memoryRows(repo, env.HOME);
+  const mineSessions = opts.mineSessions === true;
+  const minePrs = opts.minePrs === true;
+  const memory = mineSessions ? memoryRows(repo, env.HOME) : [];
   const live = new LiveFeed();
   const reads: LookBackReads = { lb: null, reviews: null, sessions: null, memory, person, agent, model, plain, skills, env, started: Date.now(), live };
-  if (lookBackOff(env) || !(opts.again || lookBackDue(repo, env))) return { reads, lines: [] };
-  reads.lb = lookBackOffThread(repo, { env, capMs: agent ? AGENT_CAP_MS : PERSON_CAP_MS, skills });
-  const lines = ['· looking back at your past Claude Code sessions here (about a minute)'];
-  // The PR-review read is phase 0's second call: only where the naming call may run (0 rule 4), or where the person
-  // asked for Trail on its page (`--pair`), whoever runs init. An agent's read ends inside its tool call's limit.
-  const reviews = model || (opts.pair === true && !plain);
-  reads.reviews = reviews
+  if ((!mineSessions && !minePrs) || lookBackOff(env) || !(opts.again || lookBackDue(repo, env))) return { reads, lines: [] };
+  const lines: string[] = [];
+  if (mineSessions) {
+    reads.lb = lookBackOffThread(repo, { env, capMs: agent ? AGENT_CAP_MS : PERSON_CAP_MS, skills });
+    lines.push('· looking back at your past Claude Code sessions here (about a minute)');
+  }
+  // The PR-review read is phase 0's second call: only where the naming call may run (0 rule 4). An agent's read ends
+  // inside its tool call's limit.
+  const reviews = model;
+  reads.reviews = reviews && minePrs
     ? beginReviewRead(repo, env, 'gh', agent ? AGENT_CAP_MS : undefined, (f) => live.push({ title: f.title, body: f.body, from: 'prs' }))
     : null;
   if (reads.reviews) lines.push("· reading this repo's pull requests for what the team decided and ruled out");
   // The same rule starts the session read: it goes to the person's own Claude Code, on this machine.
-  reads.sessions = reviews
+  reads.sessions = reviews && mineSessions
     ? beginSessionRead(repo, env, {
       ...(agent ? { capMs: AGENT_CAP_MS } : {}),
       again: opts.again === true,
@@ -113,7 +123,7 @@ export function beginLookBack(repo: string, opts: { env?: NodeJS.ProcessEnv; pla
     })
     : null;
   // One line for both reads of the sessions: the look-back's and what was decided in them.
-  if (reads.sessions) lines[0] = '· reading your past Claude Code sessions here for what was decided, with your Claude Code on this laptop (about a minute)';
+  if (reads.sessions && lines[0]) lines[0] = '· reading your past Claude Code sessions here for what was decided, with your Claude Code on this laptop (about a minute)';
   return { reads, lines };
 }
 
@@ -207,13 +217,12 @@ function itemsOf(picked: Array<InitCandidate & { n: number }>, named: Named, env
 
 /**
  * `team`: #662's team rows saved into `.trail/learnings/`, for the agent's commit ask; `teamKept`: what they were, with
- * no screen. `read`: what was looked at, for `init --pair` and `--connect` to count: the past sessions, and the merged
- * PRs (null when the PR reviews weren't read). `skills`: the skills the look-back found this run, each kept (or not) on
- * this machine only, for the pair page to list by name and day count: never their steps.
+ * no screen. `read`: what was looked at: the past sessions, and the merged PRs (null when the PR reviews weren't
+ * read). `skills`: the skills the look-back found this run, each kept (or not) on this machine only: never their steps.
  */
 export interface LookBackDone { kept: number; inRepo: boolean; team: number; teamKept?: TeamKept; read?: { sessions: number; prs: number | null }; skills?: FoundSkill[] }
 
-/** A skill the look-back found, as `init --pair` names it to Trail's page: its name and title, and on how many days it came up. */
+/** A skill the look-back found: its name and title, and on how many days it came up. */
 export interface FoundSkill { id: string; name: string; title: string; days: number }
 
 /**

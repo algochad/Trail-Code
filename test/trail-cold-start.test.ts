@@ -323,7 +323,7 @@ test("run by an agent, trail init looks back with no model and relays the person
   const home = mkdtempSync(join(tmpdir(), "cold-agent-home-"));
   const repo = repoWithHistory("cold-agent", home);
   const bin = fakeClaude();
-  const r = initRun(repo, home, bin, [], { CLAUDECODE: "1" });
+  const r = initRun(repo, home, bin, ["--mine-sessions"], { CLAUDECODE: "1" });
   assert.equal(r.status, 0, r.err);
   assert.match(r.err, /· looking back at your past Claude Code sessions here \(about a minute\)/);
   assert.match(r.err, /✓ looked back at 2 Claude Code sessions about this repo, typed into on 2 days \(Oct 1 to Oct 3\)/);
@@ -345,7 +345,7 @@ test("run by an agent, trail init looks back with no model and relays the person
 test("an agent's trail init --yes keeps nothing (R25)", { skip: process.platform === "win32" }, () => {
   const home = mkdtempSync(join(tmpdir(), "cold-yes-home-"));
   const repo = repoWithHistory("cold-yes", home);
-  const r = initRun(repo, home, fakeClaude(), ["--yes"], { CLAUDECODE: "1" });
+  const r = initRun(repo, home, fakeClaude(), ["--yes", "--mine-sessions"], { CLAUDECODE: "1" });
   assert.equal(r.status, 0, r.err);
   assert.match(r.err, /found 0 skills, 0 always-follow learnings and 1 learning\. Kept nothing: an agent ran this\./);
   assert.ok(!existsSync(join(home, ".trail", "learnings")));
@@ -356,11 +356,11 @@ test("TRAIL_NO_FETCH leaves the look-back on (nothing is fetched); TRAIL_NO_LOOK
   const home = mkdtempSync(join(tmpdir(), "cold-switch-home-"));
   const off = repoWithHistory("cold-switch-off", home);
   const bin = fakeClaude();
-  const r = initRun(off, home, bin, [], { TRAIL_NO_LOOK_BACK: "1", CLAUDECODE: "1" });
+  const r = initRun(off, home, bin, ["--mine-sessions"], { TRAIL_NO_LOOK_BACK: "1", CLAUDECODE: "1" });
   assert.equal(r.status, 0, r.err);
   assert.doesNotMatch(r.err, /looking back/);
   const on = repoWithHistory("cold-switch-on", home);
-  const r2 = initRun(on, home, bin, [], { TRAIL_NO_FETCH: "1", CLAUDECODE: "1" });
+  const r2 = initRun(on, home, bin, ["--mine-sessions"], { TRAIL_NO_FETCH: "1", CLAUDECODE: "1" });
   assert.match(r2.err, /looking back at your past Claude Code sessions/);
   assert.equal(calls(bin), 0);
 });

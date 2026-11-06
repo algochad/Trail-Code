@@ -217,7 +217,7 @@ process.exit(1);
 }
 
 function initRun(repo: string, home: string, bin: string) {
-  const r = spawnSync(process.execPath, ["--import", "tsx", join(process.cwd(), "src", "bin", "trail.ts"), "init", repo, "--agents", "claude", "--no-build", "--no-global"], {
+  const r = spawnSync(process.execPath, ["--import", "tsx", join(process.cwd(), "src", "bin", "trail.ts"), "init", repo, "--agents", "claude", "--no-build", "--no-global", "--mine-sessions", "--mine-prs"], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -248,7 +248,7 @@ const reviewLearnings = (repo: string) =>
 // The stand-ins are shebang scripts, which Windows won't run as `claude` or `gh`.
 // 1b (0 rule 4, R60): only the person at their own terminal may start `claude`, so an init with no terminal reads no
 // PR reviews and never asks gh. The reading itself is tested above; at the terminal it runs from `beginLookBack`.
-test("trail init with no terminal reads no PR reviews: gh isn't asked and claude isn't started, and the sessions are still looked back at", { skip: process.platform === "win32" }, () => {
+test("trail init --mine-prs with no terminal reads no PR reviews: gh isn't asked and claude isn't started, and the sessions are still looked back at", { skip: process.platform === "win32" }, () => {
   for (const signedIn of [true, false]) {
     const home = mkdtempSync(join(tmpdir(), "reviews-init-home-"));
     const repo = githubRepo(`reviews-init-${signedIn}`);

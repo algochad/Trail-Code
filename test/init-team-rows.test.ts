@@ -65,7 +65,7 @@ test("run by an agent, init keeps the team's memory row as #662 does, asks about
       { type: "user", cwd: repo, timestamp: at, message: { role: "user", content: "never use em dashes in the copy" } },
     ].map((e) => JSON.stringify(e)).join("\n") + "\n");
   writeFileSync(join(project, "memory", "retry.md"), "---\nname: retry-budget\ndescription: Retries stay at 4 because the gateway times out at 30 s\ntype: project\n---\n\nKeep MAX at 4 in src/retry.ts.\n\n**Why:** 4 tries × 7 s fit under the gateway's 30 s.\n");
-  const r = spawnSync(process.execPath, ["--import", import.meta.resolve("tsx"), join(process.cwd(), "src", "bin", "trail.ts"), "init", repo, "--agents", "claude", "--no-build", "--no-global"], {
+  const r = spawnSync(process.execPath, ["--import", import.meta.resolve("tsx"), join(process.cwd(), "src", "bin", "trail.ts"), "init", repo, "--agents", "claude", "--no-build", "--no-global", "--mine-sessions"], {
     encoding: "utf8",
     cwd: repo,
     env: { ...process.env, HOME: home, USERPROFILE: home, TRAIL_HOME: join(home, ".trail"), DO_NOT_TRACK: "1", CLAUDECODE: "1", TRAIL_NO_LOOK_BACK: undefined, TRAIL_INVOKED_AS: undefined },
@@ -136,7 +136,7 @@ test("at the person's terminal the team row is on the screen, ticked; enter keep
   await withMemoryRepo("team-rows-enter", async (repo, env) => {
     const said: string[] = [];
     const t = fakeTty(["\r"]);
-    const { reads } = beginLookBack(repo, { env, deps: atTerminal, plain: true });
+    const { reads } = beginLookBack(repo, { mineSessions: true, minePrs: true, env, deps: atTerminal, plain: true });
     assert.equal(reads.memory.length, 1);
     const r = await finishLookBack(repo, reads, { yes: false, say: (l) => said.push(l), io: t.io });
     assert.match(t.out(), /For your whole team\. These go into this repo, and your teammates' Claude gets them once you commit\.\n› \[x\] 1 {2}Retries stay at 4 because the gateway times out at 30 s/);
@@ -149,11 +149,11 @@ test("at the person's terminal the team row is on the screen, ticked; enter keep
 test("esc on the screen keeps no team row and marks none offered, so the next init asks again", { skip: process.platform === "win32" }, async () => {
   await withMemoryRepo("team-rows-esc", async (repo, env) => {
     const t = fakeTty(["\x1b"]);
-    const { reads } = beginLookBack(repo, { env, deps: atTerminal, plain: true });
+    const { reads } = beginLookBack(repo, { mineSessions: true, minePrs: true, env, deps: atTerminal, plain: true });
     const r = await finishLookBack(repo, reads, { yes: false, say: () => {}, io: t.io });
     assert.equal(r.team, 0);
     assert.deepEqual(learningsIn(repo), []);
-    assert.equal(beginLookBack(repo, { env, deps: atTerminal, plain: true }).reads.memory.length, 1, "offered again");
+    assert.equal(beginLookBack(repo, { mineSessions: true, minePrs: true, env, deps: atTerminal, plain: true }).reads.memory.length, 1, "offered again");
   });
 });
 

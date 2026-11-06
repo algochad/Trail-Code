@@ -999,7 +999,9 @@ grouped(program.command("init"), GROUP.setup)
   .option("--no-global", "skip writes outside this repo (the ~/.codex/ config + hooks)")
   .option("--verbose", "print every file written, the graph build's own output and the closing banner")
   .option("--plain", "look back without asking Claude to name what it finds")
-  .option("--look-back", "look back at your past sessions again, for what isn't kept or closed yet")
+  .option("--look-back", "look back at your past sessions again, for what isn't kept or closed yet (implies --mine-sessions)")
+  .option("--mine-sessions", "learn from your past Claude Code sessions in this repo (off by default; they are read on this machine, by your own Claude Code)")
+  .option("--mine-prs", "learn from the review comments on this repo's last merged PRs, through gh (off by default)")
   .action(async (dir: string, opts: InitOptions) => {
     await runInitCommand(dir, opts);
   });
@@ -1190,7 +1192,7 @@ export function commitAsk(title: string, about?: string): string {
 }
 
 /** `graft init`'s flags, as commander hands them over. */
-interface InitOptions { build?: boolean; agents?: string[]; allAgents?: boolean; listAgents?: boolean; mcp?: boolean; hooks?: boolean; statusline?: boolean; dryRun?: boolean; yes?: boolean; global?: boolean; verbose?: boolean; plain?: boolean; lookBack?: boolean }
+interface InitOptions { build?: boolean; agents?: string[]; allAgents?: boolean; listAgents?: boolean; mcp?: boolean; hooks?: boolean; statusline?: boolean; dryRun?: boolean; yes?: boolean; global?: boolean; verbose?: boolean; plain?: boolean; lookBack?: boolean; mineSessions?: boolean; minePrs?: boolean }
 
 /** Repo-relative with forward slashes, for printing. */
 function shown(repo: string, path: string): string {
@@ -1313,8 +1315,15 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     // up at the end. Nothing is kept without a tick (see src/init/review.ts).
     const tty = Boolean(process.stdin.isTTY && process.stderr.isTTY);
     // Past Claude sessions are on this laptop only where Claude Code is.
-    const lookBack = TRAIL && wantClaude && (!laptop || laptop.includes("claude")) ? beginLookBack(repo, { plain: opts.plain === true, again: opts.lookBack === true }) : null;
+    const mineSessions = opts.mineSessions === true || opts.lookBack === true;
+    const minePrs = opts.minePrs === true;
+    const lookBack = TRAIL && wantClaude && (!laptop || laptop.includes("claude")) ? beginLookBack(repo, { plain: opts.plain === true, again: opts.lookBack === true, mineSessions, minePrs }) : null;
     for (const line of lookBack?.lines ?? []) console.error(line);
+    if (lookBack && !(mineSessions && minePrs)) {
+      const off = [!mineSessions && "your past Claude Code sessions", !minePrs && "this repo's pull requests"].filter(Boolean).join(" or ");
+      const flags = [!mineSessions && "--mine-sessions", !minePrs && "--mine-prs"].filter(Boolean).join(" and/or ");
+      console.error(`· not reading ${off}: add ${flags} to trail init to learn from ${!mineSessions && !minePrs ? "them" : "it"}`);
+    }
     if (children.length)
       console.error(`· workspace: wiring ${repo} and ${children.length} child repo(s): ${children.join(", ")}`);
 

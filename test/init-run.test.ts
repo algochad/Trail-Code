@@ -126,7 +126,7 @@ test("an agent's init looks back without a model and relays: a claude stand-in o
     skillsOn(env);
     const said: string[] = [];
     const agentEnv = { ...env, CLAUDECODE: "1" };
-    const { reads, lines } = beginLookBack(w.repo, { env: agentEnv, deps: deps(false) });
+    const { reads, lines } = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env: agentEnv, deps: deps(false) });
     assert.deepEqual(lines, ["· looking back at your past Claude Code sessions here (about a minute)"]);
     const r = await finishLookBack(w.repo, reads, { yes: false, say: (l) => said.push(l) });
     assert.equal(r.kept, 0);
@@ -153,14 +153,14 @@ test("an agent's --yes keeps nothing and says so (R25); the person's script's --
   await inWorld("yes", async (w, env, claude) => {
     skillsOn(env);
     const said: string[] = [];
-    const a = beginLookBack(w.repo, { env: { ...env, CLAUDECODE: "1" }, deps: deps(false) });
+    const a = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env: { ...env, CLAUDECODE: "1" }, deps: deps(false) });
     const ra = await finishLookBack(w.repo, a.reads, { yes: true, say: (l) => said.push(l) });
     assert.equal(ra.kept, 0);
     assert.ok(said.includes("found 1 skill, 1 always-follow learning and 1 learning. Kept nothing: an agent ran this. The person picks with trail keep <numbers> after seeing the list, or trail init --look-back in their own terminal"));
     assert.ok(!existsSync(join(w.trail, "learnings")));
 
     const script: string[] = [];
-    const s = beginLookBack(w.repo, { env, deps: deps(false), again: true });
+    const s = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env, deps: deps(false), again: true });
     const rs = await finishLookBack(w.repo, s.reads, { yes: true, say: (l) => script.push(l) });
     assert.equal(rs.kept, 1);
     assert.equal(claude.calls(), 0, "no TTY: no naming call");
@@ -200,7 +200,7 @@ test("the person at their terminal: one naming call, the screen, and enter keeps
     skillsOn(env);
     const said: string[] = [];
     const t = fakeTty([" ", "\r"]);
-    const { reads } = beginLookBack(w.repo, { env, deps: deps(true) });
+    const { reads } = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env, deps: deps(true) });
     assert.equal(reads.model, true);
     const r = await finishLookBack(w.repo, reads, { yes: false, say: (l) => said.push(l), io: t.io });
     assert.equal(claude.calls(), 1, "one naming call");
@@ -217,7 +217,7 @@ test("the person at their terminal: one naming call, the screen, and enter keeps
     // A closed item and a kept one never come back on --look-back (D46).
     const again: string[] = [];
     const t2 = fakeTty(["\r"]);
-    const b = beginLookBack(w.repo, { env, deps: deps(true), again: true });
+    const b = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env, deps: deps(true), again: true });
     await finishLookBack(w.repo, b.reads, { yes: false, say: (l) => again.push(l), io: t2.io });
     assert.doesNotMatch(t2.out(), /release-npm|no-timeout|lint script/);
   });
@@ -228,14 +228,14 @@ test("esc defers: nothing kept or closed, the items wait for the person's next i
     skillsOn(env);
     const said: string[] = [];
     const t = fakeTty(["\x1b"]);
-    const { reads } = beginLookBack(w.repo, { env, deps: deps(true), plain: true });
+    const { reads } = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env, deps: deps(true), plain: true });
     await finishLookBack(w.repo, reads, { yes: false, say: (l) => said.push(l), io: t.io });
     assert.deepEqual(said.filter((l) => !l.startsWith("· still")), ["kept nothing · they wait until you run trail init again"]);
     const rec = readInitRecord(repoPlace(w.repo, env).key, env);
     assert.equal(rec.deferred.length, 3);
     assert.deepEqual(rec.closed, []);
     const agent: string[] = [];
-    const a = beginLookBack(w.repo, { env: { ...env, CLAUDECODE: "1" }, deps: deps(false) });
+    const a = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env: { ...env, CLAUDECODE: "1" }, deps: deps(false) });
     await finishLookBack(w.repo, a.reads, { yes: true, say: (l) => agent.push(l) });
     assert.doesNotMatch(agent.join("\n"), /release-npm|no-timeout|lint script/, "deferred items are not the agent's to show");
   });
@@ -245,7 +245,7 @@ test("with skills off: no skill item, and init ends saying how to turn them on (
   await inWorld("off", async (w, env) => {
     writeFileSync(join(env.TRAIL_HOME!, "settings.json"), JSON.stringify({ v: 1, skills: "off" }));
     const said: string[] = [];
-    const { reads } = beginLookBack(w.repo, { env: { ...env, CLAUDECODE: "1" }, deps: deps(false) });
+    const { reads } = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env: { ...env, CLAUDECODE: "1" }, deps: deps(false) });
     await finishLookBack(w.repo, reads, { yes: false, say: (l) => said.push(l) });
     assert.doesNotMatch(said.join("\n"), /\(skill\)/);
     assert.equal(said[said.length - 1], "skills are off · trail skills on lets init also find repeated jobs and keep their steps");
@@ -259,7 +259,7 @@ test("offers off: the screen's end says so with the day, and init never writes s
     const before = readFileSync(file);
     const said: string[] = [];
     const t = fakeTty(["\r"]);
-    const { reads } = beginLookBack(w.repo, { env, deps: deps(true), plain: true });
+    const { reads } = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env, deps: deps(true), plain: true });
     await finishLookBack(w.repo, reads, { yes: false, say: (l) => said.push(l), io: t.io });
     assert.ok(said.some((l) => /^skill offers are off \(you turned them off on .+\) · trail skills offers on$/.test(l)), said.join("\n"));
     assert.ok(!said.some((l) => l.startsWith("skills: on")));

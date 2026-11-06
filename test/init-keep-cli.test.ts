@@ -44,7 +44,7 @@ async function relayed(w: World): Promise<Ctx> {
   const env = { HOME: w.home, TRAIL_HOME: w.trail, PATH: "/nonexistent", TRAIL_NO_FETCH: "1", DO_NOT_TRACK: "1" };
   writeFileSync(join(w.trail, "settings.json"), JSON.stringify({ v: 1, skills: "on" }));
   const said: string[] = [];
-  const { reads } = beginLookBack(w.repo, { env: { ...env, CLAUDECODE: "1" }, deps: { stdinTTY: false, stdoutTTY: false, ps: PS, pid: 77 } });
+  const { reads } = beginLookBack(w.repo, { mineSessions: true, minePrs: true, env: { ...env, CLAUDECODE: "1" }, deps: { stdinTTY: false, stdoutTTY: false, ps: PS, pid: 77 } });
   await finishLookBack(w.repo, reads, { yes: false, say: (l) => said.push(l) });
   const listText = said.filter((l) => !l.startsWith("· still")).join("\n");
   const reply = "From Trail's look-back:\n1. release-npm (skill)\n2. no-timeout (guardrail)\n3. \"never use em dashes in the copy\" (your own words)\nWhich numbers should I keep?";
