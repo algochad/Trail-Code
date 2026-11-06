@@ -25,6 +25,8 @@ import { formatOverlap, readBranchCache, refreshBranches } from "../src/notes/br
 import { formatNoteHits, listNotes, parseNote, standingLearnings, whoseLearning, writeNote, type Note } from "../src/notes/notes.js";
 import { cacheDir } from "../src/util/state.js";
 
+// These tests are about the refresh that fetches: it is off unless asked for (branches-fetch-opt-in.test.ts).
+process.env.TRAIL_FETCH = "1";
 process.env.DO_NOT_TRACK = "1";
 process.env[BRAND_ENV] = "trail";
 process.env.TRAIL_HOME = mkdtempSync(join(tmpdir(), "text-safety-home-"));

@@ -51,7 +51,7 @@ import { planInit, selectedWrites } from "./hosts/plan.js";
 import { planRetract, runRetract, changed, type Retraction } from "./hosts/retract.js";
 import { compactWrites, formatNonInteractiveHelp, formatPlan, runPicker } from "./cli-picker.js";
 import { buildGraphWithProgress } from "./claude/build-progress.js";
-import { formatUpgradeReport, readCurrentVersion, readPackageName, runUpgrade } from "./cli-meta.js";
+import { readCurrentVersion, readPackageName } from "./cli-meta.js";
 import { nativeFallbackNotice } from "./graph/native.js";
 import { patchBuildConfig, type BuildConfig } from "./util/state.js";
 import { normalizePathPrefix } from "./util/paths.js";
@@ -77,8 +77,7 @@ import { formatOverlap, maybeRefreshBranches, overlapsWith, pushedWhen, readBran
 import { ensureRepoTrail, LEARNINGS_DIR } from "./notes/repo-trail.js";
 import type { AskResult } from "./ask/ask.js";
 import { setInputRate } from "./context/savings.js";
-import { readStamp, wiredHostIds, wiringOpts, writeStamp } from "./upkeep.js";
-import { shouldMoveToTrail } from "./upkeep-run.js";
+import { writeStamp } from "./upkeep.js";
 import { userHome } from "./util/home.js";
 
 const program = new Command();
@@ -310,34 +309,10 @@ program
   });
 
 grouped(program.command("upgrade"), GROUP.setup)
-  .description(`Upgrade the globally installed ${brand()} to the latest version on npm`)
+  .description("This fork does not update itself: it updates through the Claude Code plugin")
   .action(() => {
-    const result = runUpgrade(import.meta.url);
-    console.log(formatUpgradeReport(result));
-    if (result.ran && !result.ok) process.exit(1);
-    if (!TRAIL && result.ok && result.trailVersion) moveHereToTrail(process.cwd());
+    console.log("This build of trail is updated through its Claude Code plugin, not from npm: nothing is installed or fetched here.");
   });
-
-/**
- * After `graft upgrade` brought the trail command along, the repo it ran in
- * moves to trail now, with the agents and flags its last init chose, and its
- * past sessions are read for learnings. Every other repo wired as graft moves
- * the next time a session opens in it (upkeep-run.ts).
- */
-function moveHereToTrail(dir: string): void {
-  const root = checkoutRoot(dir);
-  if (!root || !shouldMoveToTrail(root)) return;
-  const stamp = readStamp(root);
-  const hosts = [...new Set([...(stamp?.hosts ?? []), ...wiredHostIds(root)])];
-  const o = wiringOpts(stamp);
-  const flags = [o.global ? null : "--no-global", o.mcp ? null : "--no-mcp", o.hooks ? null : "--no-hooks", o.statusline ? null : "--no-statusline"].filter(
-    (f): f is string => f !== null,
-  );
-  // An `--agents auto` run moves the same way: the main agents' repo files, laptop settings for the ones installed.
-  const agents = o.laptop ? ["auto"] : hosts;
-  console.log(`· moving this repo to trail: trail init ${agents.length ? `--agents ${agents.join(" ")} ` : ""}${flags.join(" ")}`.trimEnd());
-  spawnSync("trail", ["init", root, "--agents", ...agents, ...flags], { stdio: "inherit" });
-}
 
 grouped(program.command("build"), GROUP.setup)
   .description(

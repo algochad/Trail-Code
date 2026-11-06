@@ -11,7 +11,7 @@
  * Enumerating the files here instead means `npm test` behaves identically in
  * cmd.exe, PowerShell, bash and CI, on any supported Node.
  */
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
@@ -48,7 +48,13 @@ const gitEnv = {
 // don't all remove them: a day of runs left over 50,000 folders (6 GB). Give the
 // run its own temp folder and remove it at the end, whatever the outcome.
 const runTmp = mkdtempSync(join(tmpdir(), "trail-test-run-"));
+// A fresh HOME for the run too, so no test can write the real ~/.trail, ~/.claude or ~/.gitconfig (and none reads them).
+// Variables that would point Claude Code's or Codex's folders at the real ones are dropped, so each test's own HOME rules.
+const runHome = join(runTmp, "home");
+mkdirSync(runHome, { recursive: true });
 const tmpEnv = { TMPDIR: runTmp, TEMP: runTmp, TMP: runTmp };
+const homeEnv = { HOME: runHome, USERPROFILE: runHome };
+for (const k of ["TRAIL_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME"]) delete process.env[k];
 
 // A graft repo moves to trail when a session opens on a machine with the trail
 // command, so a contributor who has trail installed would see test repos move.
@@ -56,7 +62,7 @@ const tmpEnv = { TMPDIR: runTmp, TEMP: runTmp, TMP: runTmp };
 const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...files], {
   cwd: repoRoot,
   stdio: "inherit",
-  env: { ...process.env, ...gitEnv, ...tmpEnv, GRAFT_NO_TRAIL_SWITCH: "1" },
+  env: { ...process.env, ...gitEnv, ...tmpEnv, ...homeEnv, GRAFT_NO_TRAIL_SWITCH: "1" },
 });
 try {
   rmSync(runTmp, { recursive: true, force: true });

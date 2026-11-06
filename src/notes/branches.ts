@@ -193,7 +193,7 @@ function closedPrHeads(repo: string): ClosedHeads | null {
 }
 
 /**
- * Fetch, then read every recently pushed branch: the files it changes and the
+ * Fetch (only with TRAIL_FETCH=1), then read every recently pushed branch: the files it changes and the
  * learnings it adds. Writes the cache and returns it. `fetch: false` reads
  * the refs already on this machine, for tests and for a repo that's offline.
  * `prs: true` also asks GitHub which pull requests closed, which only the
@@ -205,8 +205,10 @@ export function refreshBranches(
   opts: { fetch?: boolean; now?: number; fetchTimeoutMs?: number; prs?: boolean; closed?: ClosedHeads } = {},
 ): BranchCache {
   const now = opts.now ?? Date.now();
-  // TRAIL_NO_FETCH: tests, and anyone who'd rather fetch themselves.
-  const online = opts.fetch !== false && !process.env.TRAIL_NO_FETCH;
+  // Off unless TRAIL_FETCH=1: a fetch from origin and a `gh pr list` are network calls nobody asked for. Without them
+  // the overlap check reads the refs already on this machine (the person's own `git fetch` brings new ones).
+  // TRAIL_NO_FETCH=1 turns it off even then.
+  const online = opts.fetch !== false && process.env.TRAIL_FETCH === "1" && !process.env.TRAIL_NO_FETCH;
   if (online) git(repo, ["fetch", "--quiet", "--prune", "origin"], opts.fetchTimeoutMs ?? 30_000);
   const closed = opts.closed ?? (online && opts.prs ? closedPrHeads(repo) : null) ?? readBranchCache(repo)?.closed ?? {};
   const base = defaultRef(repo);

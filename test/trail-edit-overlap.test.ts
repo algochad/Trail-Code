@@ -9,6 +9,8 @@ import { refreshBranches } from "../src/notes/branches.js";
 import { changedLines, cleanSubject, editedLines, editOverlapDirective, functionOverlaps } from "../src/notes/edit-overlap.js";
 
 process.env.DO_NOT_TRACK = "1";
+// These tests are about the refresh that fetches: it is off unless asked for (branches-fetch-opt-in.test.ts).
+process.env.TRAIL_FETCH = "1";
 process.env[BRAND_ENV] = "trail";
 process.env.TRAIL_HOME = mkdtempSync(join(tmpdir(), "overlap-trail-home-"));
 

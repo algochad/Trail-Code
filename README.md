@@ -4,14 +4,16 @@
 > **Removed**
 > - **Telemetry.** No usage stats, no first-run notice, no `trail telemetry` command, no install ping.
 > - **The Trail cloud workspace.** No sign-in, pairing, `init --connect` or `--pair`, `trail login`, `logout` or `workspace`, no session sharing, and no uploads. Learnings are plain files in your repo's `.trail/learnings/`, shared through git.
-> - **The npm version check.** Nothing looks for a newer version in the background, and no "update available" line is printed. (`trail upgrade` still runs `npm install -g` when you run it yourself.)
+> - **The npm version check.** Nothing looks for a newer version in the background, and no "update available" line is printed. `trail upgrade` installs nothing: this fork updates through its Claude Code plugin.
 >
 > **Opt-in**
+> - Fetching teammates' branches is off. The overlap check reads the refs already on your machine; set `TRAIL_FETCH=1` to let it run `git fetch origin` and `gh pr list` in the background.
 > - Reading history is off. `trail init` reads your past Claude Code sessions only with `--mine-sessions`, and the review comments on the repo's last merged PRs (through `gh`) only with `--mine-prs`.
 >
 > **New commands**
 > - `trail hooks print` prints the `hooks` object for a Claude Code plugin's `hooks/hooks.json`: the same events, matchers and timeouts `trail init` registers, each running `trail hook <event>`.
 > - `trail hook <event>` is what those hooks run. It reads the hook payload on stdin and always exits 0.
+> - `trail init --plugin` sets up the repo for a plugin that owns the hooks and the skill: nothing is written under `~/.claude`. `trail skill export --out DIR` writes the skill file for the plugin to ship.
 > - `trail init --no-hooks --no-statusline` sets up `.trail/`, the code map and the skill file without writing any Claude Code settings. See [Letting a plugin own the hooks](#letting-a-plugin-own-the-hooks).
 >
 > Also fixed: every `git diff`, `show` and `log` the code runs ignores your own git config (`diff.mnemonicPrefix`, `diff.colorMoved`, `color.ui` and the like), which used to break `trail blast` and `trail check` on some setups.
@@ -546,7 +548,7 @@ _Summary, sources, links, and your text ship today in markdown nodes. The crux s
 
 - **On your machine, no key, no network:** the structural code graph. `trail build` (wiring graph + per-file cards), `trail build --check`, `trail ask`, learnings and `trail check` are deterministic. They never call a model.
 - **Through your provider key:** the LLM-written parts. `trail build --deep` adds the concept nodes (file summaries + node synthesis) and the per-symbol summaries and cruxes. The graft map is vendor-neutral: set `GRAFT_PROVIDER` (`openai` for any OpenAI-compatible endpoint, `anthropic` for the native API, or `litellm` / `orcarouter` for a gateway that speaks the OpenAI-compatible format), your `GRAFT_API_KEY`, `GRAFT_MODEL`, and, for the `openai` wire format, `GRAFT_BASE_URL` to point at OpenRouter, Fireworks, Groq, a LiteLLM proxy, a local server, or OpenAI itself. Or pass `--provider/--model/--api-key/--base-url` on the command line. (`OPENROUTER_API_KEY` still works as a deprecated fallback, and `ORCAROUTER_API_KEY` as a second one.)
-- **Nothing else.** No telemetry, no workspace and no version check: the only network calls are the ones you start (your model provider for `--deep`, `gh` for `--mine-prs`, `npm` for `trail upgrade`).
+- **Nothing else.** No telemetry, no workspace and no version check: the only network calls are the ones you start (your model provider for `--deep`, `gh` for `--mine-prs`), plus `git fetch` and `gh pr list` for teammates' branches if you set `TRAIL_FETCH=1`.
 
 Settings keep their `GRAFT_` names. See [`.env.example`](.env.example) for the full list (model, base URL, graph directory).
 
@@ -579,6 +581,8 @@ With no TTY to prompt on (CI, a Dockerfile, a piped shell), `init` writes **noth
 | `--no-mcp` | skip MCP registration for agents other than Claude Code |
 | `--no-hooks` | write no hooks: for agents other than Claude Code, and for Claude Code no hook shim or hook entries in `.claude/settings.json` or `~/.claude` (see [Letting a plugin own the hooks](#letting-a-plugin-own-the-hooks)) |
 | `--no-statusline` | skip writing Claude Code `statusLine` (same as `GRAFT_NO_STATUSLINE=1`) |
+| `--plugin` | a Claude Code plugin owns the hooks and the skill: `--no-hooks --no-statusline --no-user-skill`. Nothing is written under `~/.claude`, and `.trail/plugin-managed.json` records it |
+| `--no-user-skill` | don't write the skill file to `~/.claude/skills/trail/SKILL.md` (`trail skill export --out DIR` writes the same file for a plugin to ship) |
 | `--mine-sessions` | also read your past Claude Code sessions in this repo for what you told Claude more than once. Off by default |
 | `--mine-prs` | also read the review comments on the repo's last merged PRs, through `gh`. Off by default |
 | `--no-global` | skip writes outside this repo (the `~/.codex/` entries below) |
@@ -615,10 +619,12 @@ The output is the value of the `hooks` key of a plugin's `hooks/hooks.json`: the
 Then set the repo up without touching Claude Code's settings:
 
 ```bash
-trail init --agents claude --no-hooks --no-statusline
+trail init --agents claude --plugin
 ```
 
-That creates `.trail/` (learnings and the code map's cache), builds the map and writes the skill file to `~/.claude/skills/trail/SKILL.md`. It writes no hook shim, nothing to `.claude/settings.json` or `.claude/settings.local.json`, and nothing to hooks in `~/.claude`. The choice is remembered in `.trail/cache/.cache/wiring-stamp.json`, so a later session's wiring refresh doesn't bring the hooks back. Drop `--no-statusline` to keep the status line (it goes in `.claude/settings.local.json`, still no hooks).
+`--plugin` is `--no-hooks --no-statusline --no-user-skill`. The plugin ships the skill itself: `trail skill export --out skills/trail` writes the `SKILL.md` init would have written to `~/.claude/skills/trail/`.
+
+That creates `.trail/` (learnings and the code map's cache) and builds the map. It writes no hook shim, no skill, nothing under `~/.claude`, and nothing to `.claude/settings.json` or `.claude/settings.local.json`. With only `--no-hooks --no-statusline` the skill file is still written to `~/.claude/skills/trail/SKILL.md`. `.trail/plugin-managed.json` records that a plugin owns the hooks. Hooks and the MCP server never write wiring at all: only `trail init` (or another command you run) does. Drop `--no-statusline` to keep the status line (it goes in `.claude/settings.local.json`, still no hooks).
 
 ### MCP server
 
@@ -649,7 +655,7 @@ When Claude Code is selected (it is by default), it gets more than the skill fil
 - **auto-sync**: every query brings the graph up to date first, so an answer always describes the code as it is right now, uncommitted edits included. A query refreshes only what it reads; the markdown under `graft/` is refreshed by the background rebuild at the end of a turn that touched code. Both are structural and `$0`; auto-sync never calls the LLM on its own
 - **context on tap**: each prompt pulls in the matching nodes and the learnings left on that code; editing a file surfaces what depends on it ("blast radius"); new sessions start with the repo map and how many learnings there are
 - **learnings when you ask**: say "save this as a learning" and Claude saves one; it never asks to on its own
-- **overlap with teammates**: at session start, and every few minutes, it reads what teammates' open branches change, skipping any already merged or closed; when Claude edits a function or constant one of them also changes, it reads their change and tells you whether the two clash
+- **overlap with teammates**: at session start, and every few minutes, it reads what teammates' open branches change from the refs already on your machine (`git fetch` yourself, or set `TRAIL_FETCH=1` and it fetches for you), skipping any already merged or closed; when Claude edits a function or constant one of them also changes, it reads their change and tells you whether the two clash
 
 <p align="center">
   <img src="assets/graft-hook-blast-radius-demo.gif" alt="The post-edit hook: editing node-file.ts prints its blast radius (who depends on it) inline, the statusline flips stale → syncing → synced on its own, and the same dependents light up in the viewer" width="820"/>
@@ -712,6 +718,8 @@ trail init --no-statusline           # skip Claude Code statusLine (same as GRAF
 trail init --no-hooks --no-statusline # set up .trail/, the map and the skill; write no Claude Code settings (a plugin owns the hooks)
 trail init --mine-sessions           # also learn from your past Claude Code sessions here (off by default)
 trail init --mine-prs                # also learn from the review comments on the last merged PRs, via gh (off by default)
+trail init --plugin                  # a plugin owns hooks and skill: --no-hooks --no-statusline --no-user-skill; nothing under ~/.claude
+trail skill export --out DIR         # write the SKILL.md init would write, for a plugin to ship
 trail hooks print                    # the `hooks` object for a Claude Code plugin's hooks/hooks.json
 trail init --no-build                # wire the files only; don't build the graph
 trail init --all-agents              # wire every known agent, detected or not
@@ -728,7 +736,7 @@ trail build --follow-nested-repos    # include nested git clones the index doesn
 trail build --no-follow-nested-repos # exclude nested clones again and persist that choice (the default)
 
 trail status [dir]                   # the graft map, learnings and tokens saved, on one screen
-trail upgrade                        # npm install -g the latest published version (nothing checks for one in the background)
+trail upgrade                        # says this fork updates through its Claude Code plugin; installs nothing
 trail uninstall [dir]                # remove every file and config entry it wrote here (the inverse of init)
 trail uninstall -y                   # actually remove (without -y it prints what it would remove and exits)
 trail uninstall --keep-cache         # wiring only; leave graft/ and the .gitignore entry
