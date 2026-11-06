@@ -1,3 +1,21 @@
+> [!IMPORTANT]
+> **This is a local-only fork of Trail-Code.** Everything runs on your machine, and the build is meant to be driven by a Claude Code plugin. Upstream Trail-Code is [trailhq/Trail-Code](https://github.com/trailhq/Trail-Code); this fork keeps its MIT license and credits.
+>
+> **Removed**
+> - **Telemetry.** No usage stats, no first-run notice, no `trail telemetry` command, no install ping.
+> - **The Trail cloud workspace.** No sign-in, pairing, `init --connect` or `--pair`, `trail login`, `logout` or `workspace`, no session sharing, and no uploads. Learnings are plain files in your repo's `.trail/learnings/`, shared through git.
+> - **The npm version check.** Nothing looks for a newer version in the background, and no "update available" line is printed. (`trail upgrade` still runs `npm install -g` when you run it yourself.)
+>
+> **Opt-in**
+> - Reading history is off. `trail init` reads your past Claude Code sessions only with `--mine-sessions`, and the review comments on the repo's last merged PRs (through `gh`) only with `--mine-prs`.
+>
+> **New commands**
+> - `trail hooks print` prints the `hooks` object for a Claude Code plugin's `hooks/hooks.json`: the same events, matchers and timeouts `trail init` registers, each running `trail hook <event>`.
+> - `trail hook <event>` is what those hooks run. It reads the hook payload on stdin and always exits 0.
+> - `trail init --no-hooks --no-statusline` sets up `.trail/`, the code map and the skill file without writing any Claude Code settings. See [Letting a plugin own the hooks](#letting-a-plugin-own-the-hooks).
+>
+> Also fixed: every `git diff`, `show` and `log` the code runs ignores your own git config (`diff.mnemonicPrefix`, `diff.colorMoved`, `color.ui` and the like), which used to break `trail blast` and `trail check` on some setups.
+
 <div align="center">
 
 <picture>
@@ -26,7 +44,6 @@ Trail-code gives Claude Code, Cursor, Codex and other coding agents a map of you
   <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/%40trailhq%2Ftrail-code?style=for-the-badge&logo=nodedotjs&logoColor=white" /></a>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-20C997?style=for-the-badge" />
-  <a href="TELEMETRY.md"><img src="https://img.shields.io/badge/telemetry-anonymous%2C%20opt--out-546FFF?style=for-the-badge" /></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/trailhq/Trail-Code"><img src="https://img.shields.io/ossf-scorecard/github.com/trailhq/Trail-Code?style=for-the-badge&label=openssf%20scorecard" /></a>
 </p>
 
@@ -65,7 +82,7 @@ npm install -g @trailhq/trail-code && trail init
 | Re-explores code a teammate already figured out last week | Starts from their learning: what they decided, what they ruled out, what to watch out for |
 | Undoes a teammate's decision, because it never knew about it | `trail check` flags it before the PR, quoting who decided it and why |
 | Finds out at merge time that a teammate changed the same code | Says so right after it edits code a teammate's open branch also changes, and whether the two clash |
-| Has to be told the same things every session | Starts from what you've told it before: `trail init` finds what you said more than once in your past sessions |
+| Has to be told the same things every session | Starts from what you've told it before: `trail init --mine-sessions` finds what you said more than once in your past sessions |
 | You write and update CLAUDE.md by hand | Learnings are saved from your conversations, in files you can read |
 
 **Same model, more tasks solved.** On SWE-bench Verified (real GitHub issues, graded by the maintainers' own tests), Claude Sonnet 5 solved **33 of 50** issues with the graft map and **27 of 50** without it, using 23% fewer tokens. [Details](#swe-bench-verified)
@@ -110,7 +127,9 @@ trail init                      # in your repo: build the graft map, set up .tra
 > [!TIP]
 > **`npm install -g` says EACCES?** Your Node's global folder needs sudo. Skip sudo, or every upgrade will need it too: run `mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global`, add `~/.npm-global/bin` to your `PATH`, open a new terminal and install again. Trail needs Node 22.3 or newer (20.16 works too).
 
-That is the whole setup. `trail init` asks which of your coding agents to wire up, builds the graft map from your code, creates `.trail/` for the repo's learnings, and adds a statusline and hooks to Claude Code. It also reads your past Claude Code sessions in the repo, once, for what you told Claude more than once, and saves those as learnings. Your own Claude Code does that reading, in about a minute. Then work the way you always do. No daemon, no server, nothing to babysit: it is all files.
+That is the whole setup. `trail init` asks which of your coding agents to wire up, builds the graft map from your code, creates `.trail/` for the repo's learnings, and adds a statusline and hooks to Claude Code. Then work the way you always do. No daemon, no server, nothing to babysit: it is all files.
+
+By default `trail init` reads no history. To learn from your past Claude Code sessions in the repo (your own Claude Code does the reading, in about a minute), add `--mine-sessions`. To learn from the review comments on the repo's last merged PRs, add `--mine-prs` (needs `gh`, signed in). `init` prints one line saying so when either is off.
 
 Commit the setup so your teammates get it too. The graft map itself, in `graft/`, is a local cache like `node_modules` and is added to `.gitignore`, so it stays out of the commit:
 
@@ -136,7 +155,7 @@ Nothing breaks. The code map you know is now called the graft map, and it is one
 
 `graft` and `@nanonets/graft` run the same code as `trail`, and print what they always printed.
 
-Already have graft? `graft upgrade` adds the `trail` command next to it.
+Already have graft? Install the `trail` command next to it with `npm install -g @trailhq/trail-code`.
 
 Repos that graft set up move to trail on their own: once the `trail` command is installed, each one moves the first time you open Claude Code in it. To move one right away, run `trail init` in it. Commit what changes so your teammates move too.
 
@@ -181,9 +200,9 @@ Everything Trail keeps has a place (who it is for): just you, this repo, or your
 |---|---|---|---|
 | **Personal** | About you and your machine: your setup, your habits | `~/.trail/` | Only you. Never committed, never uploaded |
 | **Repo** | About the code: why it is the way it is, how work gets done in it | the repo's `.trail/`, committed with the change | Everyone who clones the repo, even before they install Trail-code |
-| **Team** | What your whole team has learned, across repos | a Trail workspace (soon) | Your team, on the team page |
+| **Team** | What your whole team has learned | the same repo files, shared through git | Your team, once they pull |
 
-Your agent picks between personal and repo: something about your own setup stays personal ("saved just for you"); something about the code goes in the repo ("added to this repo"). The team place will gather the repo learnings of every repo in your workspace, so your team sees them together.
+Your agent picks between personal and repo: something about your own setup stays personal ("saved just for you"); something about the code goes in the repo ("added to this repo"). The team place is the repo place: a teammate sees a learning when they pull it.
 
 **What it keeps:**
 
@@ -274,7 +293,7 @@ your-repo/
 
 Your agent uses learnings on its own, and saves one when you ask, at these moments:
 
-- **On day one, what you told Claude before.** `trail init` reads your own messages in the repo's past Claude Code sessions, leaving out tool output, pasted text and headless runs. It keeps only what you said in two or more sessions, and scrubs secrets.
+- **On day one, what you told Claude before.** `trail init --mine-sessions` reads your own messages in the repo's past Claude Code sessions, leaving out tool output, pasted text and headless runs. It keeps only what you said in two or more sessions, and scrubs secrets.
 - **When you ask, a learning.** Say "save this as a learning" after a decision, something you ruled out, or a correction to how something is done here, and your agent saves it: what was decided, what was ruled out, what to watch out for. A summary, never a transcript, and nothing secret. It never saves one on its own, and doesn't offer to.
 - **Before each task, the learnings on it.** Each session starts with the learnings that apply to all work in the repo. Each prompt brings in the ones earlier sessions left on that code, above the code itself. A teammate's learning says whose it is.
 - **Before a PR, the check.** Your agent is told to run `trail check` before it commits, pushes or opens a pull request.
@@ -301,7 +320,6 @@ Learnings reach your teammates through git, with no server: commit `.trail/`, an
 trail team                     # this week's learnings and overlaps
 ```
 
-Coming soon: a Trail workspace, for your team's view across repos. A team page will show who is learning what, how often learnings were reused, and where work overlaps.
 
 ---
 
@@ -310,10 +328,9 @@ Coming soon: a Trail workspace, for your team's view across repos. A team page w
 - **Your code.** The graft map is built on your machine with tree-sitter. No model, no network. The optional `trail build --deep` summaries go to the model provider you choose, under your own key.
 - **Personal learnings.** Kept in `~/.trail`. Never committed, never uploaded.
 - **Repo learnings.** Files in your repo, shared through git like any other file.
-- **Your past sessions.** `trail init` reads your own messages from Claude Code's transcripts for the repo, on your machine. Your own Claude Code does the reading, with Claude Sonnet under your login, so your messages go only to Anthropic, and it counts toward your Claude usage. None of it goes to Trail.
-- **Your PR reviews.** When `gh` is installed and signed in, `trail init` reads the review comments on the repo's last 50 merged PRs with it, under your GitHub login. Anything that looks like a secret is taken out, and your own Claude Code reads them the same way. None of it goes to Trail.
-- **If you connect a Trail workspace.** No learning goes to Trail until you do, and the sign-in link tells Trail only the repo it was offered in. Once connected, the learnings committed in the repos you added go to Trail, including those on teammates' pushed branches. An edit you haven't committed, or a file git doesn't track, stays on your machine. Each search and check that used them sends which learnings were shown and whose they are, never what you typed or which files you were in. That is how the team page counts reuse.
-- **Anonymous usage stats.** Buckets and fixed labels only, never the title, text or paths of a learning. [`TELEMETRY.md`](TELEMETRY.md) lists every field. Turn it off with `trail telemetry disable` or `DO_NOT_TRACK=1`.
+- **Your past sessions.** Only with `trail init --mine-sessions`. Trail reads your own messages from Claude Code's transcripts for the repo, on your machine. Your own Claude Code does the reading, with Claude Sonnet under your login, so your messages go only to Anthropic, and it counts toward your Claude usage.
+- **Your PR reviews.** Only with `trail init --mine-prs`, and only when `gh` is installed and signed in: `trail init` then reads the review comments on the repo's last 50 merged PRs with it, under your GitHub login. Anything that looks like a secret is taken out, and your own Claude Code reads them the same way.
+- **Nothing else leaves.** This build has no telemetry, no workspace and no background version check.
 
 ---
 
@@ -431,7 +448,7 @@ No. Each prompt gets only pointers to the matching code, and the learnings that 
 No. The graft map, the hooks, learnings and `trail check` all work without one. A key only adds the written summaries from `trail build --deep`.
 
 **Do I need to sign in?**
-No. Everything above works on your machine, and learnings reach your team through git. A Trail workspace, coming soon, is only for the team page across repos.
+No. There is nothing to sign in to. Everything works on your machine, and learnings reach your team through git.
 
 **Which agents does it work with?**
 Claude Code gets the deepest setup: hooks, statusline, and learnings with every prompt. Trail-code also wires Cursor, Codex and other `AGENTS.md` readers, Gemini CLI, GitHub Copilot, Windsurf, Kiro, Antigravity, Grok, Hermes and AdaL, and serves any agent that speaks MCP.
@@ -529,8 +546,7 @@ _Summary, sources, links, and your text ship today in markdown nodes. The crux s
 
 - **On your machine, no key, no network:** the structural code graph. `trail build` (wiring graph + per-file cards), `trail build --check`, `trail ask`, learnings and `trail check` are deterministic. They never call a model.
 - **Through your provider key:** the LLM-written parts. `trail build --deep` adds the concept nodes (file summaries + node synthesis) and the per-symbol summaries and cruxes. The graft map is vendor-neutral: set `GRAFT_PROVIDER` (`openai` for any OpenAI-compatible endpoint, `anthropic` for the native API, or `litellm` / `orcarouter` for a gateway that speaks the OpenAI-compatible format), your `GRAFT_API_KEY`, `GRAFT_MODEL`, and, for the `openai` wire format, `GRAFT_BASE_URL` to point at OpenRouter, Fireworks, Groq, a LiteLLM proxy, a local server, or OpenAI itself. Or pass `--provider/--model/--api-key/--base-url` on the command line. (`OPENROUTER_API_KEY` still works as a deprecated fallback, and `ORCAROUTER_API_KEY` as a second one.)
-- **Through Trail, only if you connect a workspace:** the learnings committed in the repos you added, and which of them each search and check showed. See [What stays on your machine](#what-stays-on-your-machine).
-- **Anonymous usage stats:** a daily npm version check and one batched usage ping. The ping carries buckets and fixed labels only: never your code, file paths, repo name, symbols, queries, learnings or error messages. [`TELEMETRY.md`](TELEMETRY.md) is the complete list and `trail telemetry debug` prints exactly what your machine would send. `DO_NOT_TRACK=1` disables both network calls; `trail telemetry disable` or unchecking the box in `trail init` disables only the usage ping. The ping is off in CI and in any build from source.
+- **Nothing else.** No telemetry, no workspace and no version check: the only network calls are the ones you start (your model provider for `--deep`, `gh` for `--mine-prs`, `npm` for `trail upgrade`).
 
 Settings keep their `GRAFT_` names. See [`.env.example`](.env.example) for the full list (model, base URL, graph directory).
 
@@ -561,8 +577,10 @@ With no TTY to prompt on (CI, a Dockerfile, a piped shell), `init` writes **noth
 | `--no-agents` | Claude Code wiring only; skip other agents |
 | `--list-agents` | print the known agent ids and exit |
 | `--no-mcp` | skip MCP registration for agents other than Claude Code |
-| `--no-hooks` | skip hook installation for agents other than Claude Code |
+| `--no-hooks` | write no hooks: for agents other than Claude Code, and for Claude Code no hook shim or hook entries in `.claude/settings.json` or `~/.claude` (see [Letting a plugin own the hooks](#letting-a-plugin-own-the-hooks)) |
 | `--no-statusline` | skip writing Claude Code `statusLine` (same as `GRAFT_NO_STATUSLINE=1`) |
+| `--mine-sessions` | also read your past Claude Code sessions in this repo for what you told Claude more than once. Off by default |
+| `--mine-prs` | also read the review comments on the repo's last merged PRs, through `gh`. Off by default |
 | `--no-global` | skip writes outside this repo (the `~/.codex/` entries below) |
 
 #### Writes outside the repo
@@ -581,6 +599,26 @@ Some agents also get **user-level** files, so the wiring follows you into worktr
 | Antigravity | `~/.gemini/skills/trail/SKILL.md` | its skill file |
 
 These apply to **every** repo you open with that agent, not just this one. The picker labels them `machine-wide`, `--dry-run` lists them in their own section, and `--no-global` skips them all while still wiring the repo's own files.
+
+### Letting a plugin own the hooks
+
+A Claude Code plugin can register the hooks instead of `trail init`. Print what it should register:
+
+```bash
+trail hooks print > /tmp/trail-hooks.json
+```
+
+The output is the value of the `hooks` key of a plugin's `hooks/hooks.json`: the same events (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`), matchers and timeouts (in seconds) that `trail init` writes into settings, with every command `trail hook <event> || exit 0`. To make the file: `trail hooks print | jq '{hooks: .}' > hooks/hooks.json`.
+
+`trail hook <event>` reads the hook payload on stdin, answers on stdout the way the host expects, and exits 0 whatever happens (bad input, an unknown event, a missing project folder), so a broken hook never stops a turn. The `|| exit 0` covers the one case it can't: `trail` not being on the machine.
+
+Then set the repo up without touching Claude Code's settings:
+
+```bash
+trail init --agents claude --no-hooks --no-statusline
+```
+
+That creates `.trail/` (learnings and the code map's cache), builds the map and writes the skill file to `~/.claude/skills/trail/SKILL.md`. It writes no hook shim, nothing to `.claude/settings.json` or `.claude/settings.local.json`, and nothing to hooks in `~/.claude`. The choice is remembered in `.trail/cache/.cache/wiring-stamp.json`, so a later session's wiring refresh doesn't bring the hooks back. Drop `--no-statusline` to keep the status line (it goes in `.claude/settings.local.json`, still no hooks).
 
 ### MCP server
 
@@ -671,6 +709,10 @@ trail init --agents cursor kiro      # wire only these agents, no prompt (ids: a
 trail init --yes                     # no prompt; wire every detected agent
 trail init --no-global               # skip writes outside this repo (~/.claude, ~/.claude.json, ~/.codex, ~/.gemini)
 trail init --no-statusline           # skip Claude Code statusLine (same as GRAFT_NO_STATUSLINE=1)
+trail init --no-hooks --no-statusline # set up .trail/, the map and the skill; write no Claude Code settings (a plugin owns the hooks)
+trail init --mine-sessions           # also learn from your past Claude Code sessions here (off by default)
+trail init --mine-prs                # also learn from the review comments on the last merged PRs, via gh (off by default)
+trail hooks print                    # the `hooks` object for a Claude Code plugin's hooks/hooks.json
 trail init --no-build                # wire the files only; don't build the graph
 trail init --all-agents              # wire every known agent, detected or not
 trail init --list-agents             # list known agent ids and exit
@@ -686,14 +728,11 @@ trail build --follow-nested-repos    # include nested git clones the index doesn
 trail build --no-follow-nested-repos # exclude nested clones again and persist that choice (the default)
 
 trail status [dir]                   # the graft map, learnings and tokens saved, on one screen
-trail upgrade                        # npm install -g the latest published version
-                                     # a new version is announced automatically (checked once a day);
-                                     # after upgrading, the next session refreshes this repo's wiring itself
+trail upgrade                        # npm install -g the latest published version (nothing checks for one in the background)
 trail uninstall [dir]                # remove every file and config entry it wrote here (the inverse of init)
 trail uninstall -y                   # actually remove (without -y it prints what it would remove and exits)
 trail uninstall --keep-cache         # wiring only; leave graft/ and the .gitignore entry
 trail uninstall --no-global          # leave out-of-repo files alone (~/.claude, ~/.claude.json, ~/.codex, ~/.gemini)
-trail telemetry [status|enable|disable|debug]   # anonymous usage stats; debug prints exactly what would be sent
 
 # CI
 trail blast [dir]                    # blast radius of a diff: what depends on the lines this change touched (no LLM, no key)
@@ -708,6 +747,7 @@ trail blast --depth all --format json  # the full transitive closure, machine-re
 trail viz [dir]                      # see the graph: serves an interactive viewer on localhost
 trail viz --export site/ --title "PR #12"  # one self-contained index.html for CI, GitHub Pages, or a build artifact
 trail mcp [dir]                      # run the MCP server by hand
+trail hook <event>                   # run one Claude Code hook event (what a plugin's hooks call); always exits 0
 
 # global
 trail --dir <path>                   # use a context dir other than <repo>/graft
