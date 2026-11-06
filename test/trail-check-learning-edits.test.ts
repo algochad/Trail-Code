@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { branchDiff } from "../src/cloud/diff.js";
+import { branchDiff } from "../src/check/branch-diff.js";
 import { checkLocally } from "../src/check/local-check.js";
 import { learningsAtBase, teammateEdits, withBaseLearnings } from "../src/check/learning-edits.js";
 import { learningId } from "../src/notes/learning-fields.js";

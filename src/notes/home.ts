@@ -309,9 +309,7 @@ the rest, and none of it leaves this machine unless you share it.
 - repos/<repo>/notes/    personal learnings: about your setup or habits,
                          not the code
 - repos/<repo>/skills/   corrections you taught your agent, per skill
-- repos/known.json       the repos Trail has run in, which is the list a
-                         workspace's repo picker shows
-- cloud.json             your Trail workspace, once you've connected one
+- repos/known.json       the repos Trail has run in
 
 <repo> is the repo's remote (github.com/owner/name), so every clone and
 worktree of one repo shares its learnings. Repos without a remote are under

@@ -10,7 +10,6 @@ import { noteAuthor, teammatesOn } from '../notes/git-facts.js';
 import { indexFreshness, staleBanner } from '../context/check.js';
 import { dropStoredPrompts, patchStats, readSession, writeSession, resolveContextDir } from './state.js';
 import { emit, emitHook, graftJson, payloadSessionId, withContextDirArg } from './hook-io.js';
-import { maybeShareSyncInBackground } from '../cloud/share-sync-state.js';
 import { codexPostBashPart, postBashPart, sessionStartPart } from './skills-wiring.js';
 import { handlePrompt } from './prompt-hook.js';
 import { runUpkeep } from '../upkeep-run.js';
@@ -24,8 +23,6 @@ import { fitTrailServerToMachine } from '../hosts/claude-global.js';
 import { globalCopyCovers } from './hook-layers.js';
 import { keepsNotes, noteCounts, repoPlace, type NoteCounts } from '../notes/home.js';
 import { branchesStale, overlapMark, readBranchCache, refreshBranches, SESSION_REFRESH_MS } from '../notes/branches.js';
-import { maybeSyncInBackground } from '../cloud/workspace-sync.js';
-import { hookNotice } from '../cloud/nudge.js';
 import { cacheDir, readJson, writeJsonAtomic } from '../util/state.js';
 import { detectHost } from '../trace/host.js';
 import type { HookOut } from '../skills/types.js';
@@ -34,9 +31,7 @@ import { everyRepoLearnings } from '../notes/every-repo.js';
 import type { Note } from '../notes/notes.js';
 import { hostFacts } from '../skills/host-facts.js';
 import { trailNow } from '../skills/settings.js';
-import { recordSkillUse, skillOfToolUse } from './skill-use.js';
 import { keptContext, keptNotice } from './start-init.js';
-import { teamSignInLine } from '../cloud/team-file.js';
 
 export { lastFileScopeHint, promptAskTimeout } from './prompt-hook.js';
 
@@ -191,13 +186,11 @@ export function learningsOnTouch(input: any, dir: string, before = false): strin
  * PreToolUse on Write and Edit: the learnings on the file, before the agent
  * changes it, while they can still change the edit. They're marked shown, so
  * the PostToolUse after the edit doesn't repeat them. A teammate's learning
- * just reached the agent, which is when the person gets the workspace link.
  */
 export function handlePreEdit(input: any, dir: string): void {
   const learned = learningsOnTouch(input, dir, true);
   if (!learned) return;
-  const notice = hookNotice(dir, "Claude just got your team's learnings on the file it's changing", { session: payloadSessionId(input) }) ?? undefined;
-  emitHook('PreToolUse', { context: learned, notice });
+  emitHook('PreToolUse', { context: learned });
 }
 
 /**
@@ -343,7 +336,6 @@ function trailAtStart(dir: string): void {
   } catch {
     // Without it, the first prompt sees what the last refresh saw.
   }
-  maybeSyncInBackground(dir);
 }
 
 /** What the session-start text says about learnings, read once. */
@@ -432,8 +424,6 @@ export async function main(event: string): Promise<void> {
   if (event === 'pre-bash') { await preBashMain(event); return; }
   // trail's own headless Claude calls (the first-run read of past sessions) run with this set.
   if (process.env.TRAIL_NO_HOOKS === '1') return;
-  // The one user-level entry `trail share-session` adds: start the background send, nothing else.
-  if (event === 'share-sync') { maybeShareSyncInBackground(); return; }
   const input = readStdin();
   // Registered in the repo and in ~/.claude, Claude Code runs both: one answers.
   // Who sent the payload decides first: Copilot CLI runs only the repo's copy.
@@ -458,8 +448,6 @@ export async function main(event: string): Promise<void> {
     // tells the person how to get it.
     const handover = wiredHostIds(dir).includes('claude') ? trailHandoverLine() : null;
     if (handover) upkeep.push(handover);
-    // Someone who said yes to `share-session --sync`: send what changed, from a detached child.
-    maybeShareSyncInBackground();
     // Once per repo: older versions kept the prompt in each session file.
     try { dropStoredPrompts(dir); } catch { /* tried again next session */ }
     trailAtStart(dir);
@@ -469,9 +457,7 @@ export async function main(event: string): Promise<void> {
     const text = orientationAtStart(dir, learningsAtStart(dir));
     const kept = keptAtStart(input, dir);
     // The skills context comes after the learnings; its notice is for the person.
-    // A repo whose team uses a Trail workspace, on a laptop not signed in to it: offered once a session.
-    const team = teamSignInLine(dir);
-    const out = [upkeep.join('\n'), text, team, skills.context, kept.context].filter(Boolean).join('\n\n');
+    const out = [upkeep.join('\n'), text, skills.context, kept.context].filter(Boolean).join('\n\n');
     const notice = [skills.notice, kept.notice].filter(Boolean).join('\n') || undefined;
     emitHook('SessionStart', { context: out, notice });
     return;
@@ -485,7 +471,6 @@ export async function main(event: string): Promise<void> {
 
   if (event === 'tool-savings') {
     handleToolUse(input, dir);
-    recordSkillUse(skillOfToolUse(input), input, dir);
     // PostToolUse on Bash: the skills mark, and the post-tool offer channel's context (3.4),
     // then the learnings about the file the call touched, in the same one answer.
     emitHook('PostToolUse', withTouchLearnings(await postBashPart(input, dir, false), input, dir));

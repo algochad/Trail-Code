@@ -15,12 +15,10 @@ import { homedir } from 'node:os';
 import { brand, tag } from '../brand.js';
 import { scopeOf, scopesOfGraph } from '../graph/scopes.js';
 import { keepsNotes } from '../notes/home.js';
-import { hookNotice, linkedNews } from '../cloud/nudge.js';
 import { findNotes, listNotes, type NoteHit } from '../notes/notes.js';
 import { INJECTED_POINTERS_CAP, notesForPrompt, relevantRetrieval, type AskJson } from './format.js';
 import { CHILD_TIMEOUT_MS, emitHook, graftJsonWithin, payloadSessionId, withContextDirArg } from './hook-io.js';
 import { promptPart } from './skills-wiring.js';
-import { recordSkillUse, skillOfPrompt } from './skill-use.js';
 import { readSession, readStats, writeSession } from './state.js';
 import { readWiring } from './stats.js';
 import { ownText, PASTE_MARK } from '../trace/claude.js';
@@ -260,14 +258,10 @@ export async function handlePrompt(input: any, dir: string, opts: { budgetMs?: n
   // Background completion notices are machine events, not user queries: no skills answer, no ask (#551).
   if (String(input?.prompt ?? '').trimStart().startsWith('<task-notification>')) return;
   const deadline = Date.now() + (opts.budgetMs ?? PROMPT_BUDGET_MS);
-  // `/name` for one of the repo's skills is a run of it; the name only goes.
-  recordSkillUse(skillOfPrompt(input?.prompt), input, dir);
   const skills = await promptPart(input, dir);
   if (skills.block) return void emitHook('UserPromptSubmit', { block: skills.block });
-  // That this machine just connected reaches the person on the next prompt, whatever it is.
-  const news = linkedNews();
-  const say = (txt: string, offer?: string | null) =>
-    emitHook('UserPromptSubmit', { context: [skills.context, txt].filter(Boolean).join('\n\n'), notice: [skills.notice, news ?? offer].filter(Boolean).join('\n') || undefined });
+  const say = (txt: string) =>
+    emitHook('UserPromptSubmit', { context: [skills.context, txt].filter(Boolean).join('\n\n'), notice: skills.notice || undefined });
   const prompt = promptWords(input?.prompt);
   if (prompt.length < MIN_CUE_CHARS) return say('');
   const underTrail = brand() === 'trail';
@@ -290,9 +284,7 @@ export async function handlePrompt(input: any, dir: string, opts: { budgetMs?: n
   // A count, never the prompt: nothing the person typed is kept (spec section 6).
   if (ask) s.promptAsks = (s.promptAsks ?? 0) + 1;
   // Teammates' branches on the same code come after an edit instead (hooks.ts editOverlap).
-  // A teammate's learning just reached the agent: the moment the person gets the workspace link.
-  const offer = notes ? hookNotice(dir, "Claude just got your team's learnings for this", { session: id }) : null;
-  say([notes, retrieval].filter(Boolean).join('\n\n'), offer);
+  say([notes, retrieval].filter(Boolean).join('\n\n'));
   if (ask || notes || said.size) writeSession(dir, id, s);
 }
 

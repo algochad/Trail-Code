@@ -10,9 +10,9 @@
  */
 import { spawnSync } from "node:child_process";
 import "dotenv/config";
-import { Command, Option } from "commander";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { Command } from "commander";
+import { readFileSync, statSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Graft } from "./engine.js";
 import { resolveConfig, type EngineConfig } from "./ai/providers.js";
@@ -26,15 +26,14 @@ import { codexStatusLines, codexTrustLine } from "./hosts/codex-trust.js";
 import { hostIds } from "./hosts/registry.js";
 import { agentList, autoSelection, autoSummary } from "./hosts/auto.js";
 import { checkoutRoot, ensureRepoHome, keepsNotes, noteCount, rememberRepo, repoName, repoPlace, shownPath } from "./notes/home.js";
-import { asksForTrail, brand, cmd, graftNotice, PACKAGE_FOR, setBrand, strandedRepoNotice, tag, trailOnPath } from "./brand.js";
-import { branchDiff } from "./cloud/diff.js";
-import { openBrowser } from "./util/browser.js";
+import { brand, cmd, graftNotice, strandedRepoNotice, tag } from "./brand.js";
+import { branchDiff } from "./check/branch-diff.js";
 import { committedAtBase, learningsAtBase, teammateEdits, withBaseLearnings } from "./check/learning-edits.js";
 import { contextDirFor } from "./context/node-file.js";
 import { loadGraphCached } from "./graph/load.js";
 import { ensureFreshChildren, ensureFreshGraph, refreshNote } from "./graph/refresh.js";
 import { isWorkspaceBuildRoot, readWorkspace } from "./graph/workspace.js";
-import { NOT_GIT_LINE, NOT_GIT_PAIR_REFUSAL, homeFolderRefusal, isGitWorkTree } from "./init-guard.js";
+import { NOT_GIT_LINE, homeFolderRefusal, isGitWorkTree } from "./init-guard.js";
 import { hasGraftIndex, nearestGraftRoot } from "./graph/root.js";
 import { unsupportedExtensions, supportedExtensions } from "./graph/source-files.js";
 import { discoverWorkspaceChildren } from "./graph/scopes.js";
@@ -51,11 +50,7 @@ import { planInit, selectedWrites } from "./hosts/plan.js";
 import { planRetract, runRetract, changed, type Retraction } from "./hosts/retract.js";
 import { compactWrites, formatNonInteractiveHelp, formatPlan, runPicker } from "./cli-picker.js";
 import { buildGraphWithProgress } from "./claude/build-progress.js";
-import { installBrainsServer, installCursorBrainsServer, removeBrainsServer, removeCursorBrainsServer } from "./hosts/claude-global.js";
-import { upsertCodexToml } from "./hosts/mcp-config.js";
 import { homedir } from "node:os";
-import { createInterface } from "node:readline";
-import { createHash } from "node:crypto";
 import { formatUpgradeReport, readCurrentVersion, readPackageName, runUpgrade } from "./cli-meta.js";
 import { nativeFallbackNotice } from "./graph/native.js";
 import { patchBuildConfig, type BuildConfig } from "./util/state.js";
@@ -64,36 +59,17 @@ import { latestSession, formatSessionStats, sessionInputRate } from "./claude/se
 import { listSessionIds, readSession, sessionDir } from "./claude/state.js";
 import { costLabel, listNotes, noteName, notePlace, noteTargets, readingTokens, commitLines, PERSONAL_SAVED_LINE, PR_SPEEDUP, SECTIONS, tokensWorthSaying, sectionLead, shortDate, tokensLabel, writeNote, type Note, mentionedFiles } from "./notes/notes.js";
 import { aboutTerms, currentSessionCost } from "./notes/session-cost.js";
-import { flatLine, unmarkedWords } from "./notes/flatten.js";
-import { beginLookBack, finishLookBack, type FoundSkill } from "./init/run.js";
+import { unmarkedWords } from "./notes/flatten.js";
+import { beginLookBack, finishLookBack } from "./init/run.js";
 import { keepCommand } from "./init/keep.js";
 import { recordInit, snapInit } from "./init/install-paths.js";
-import { finishPair, PairRun, validPairCode } from "./cloud/pair.js";
 import { currentBranch, noteAuthor, teammatesOn } from "./notes/git-facts.js";
 import { listSkills } from "./skills/skills.js";
 import { registerSkillCommands } from "./skills/cli-skills.js";
 import { gateNote, namesRepoSymbol, symbolCandidates, trackedFiles } from "./notes/note-gate.js";
-import { recordLookup } from "./cloud/lookup-activity.js";
-import { clearPending, cloudLines, loginLines, loginLink, sessionKey, startWaiting, WAIT_MS, waitForConnect } from "./cloud/nudge.js";
-import { teamWorkspace } from "./cloud/team-file.js";
-import { addRepo, claimLoginCode, clearCloud, cloudEnabled, cloudForRepo, cloudIn, deleteSharedBundle, failPair, fetchMe, fetchTeam, isError, readCloud, readClouds, sameWorkspace, serverUrl, shareAllowed, shareSession, trailUrl, useServer, writeCloud, type Cloud, type Me, type SetupFailure } from "./cloud/workspace.js";
-import {
-  claimConnectCode,
-  connectAgain,
-  offlineLine,
-  learningsSummary,
-  machineName,
-  normalizeCode,
-  OnboardingReporter,
-  repoRef,
-  teammatesChecked,
-  teammatesFromGit,
-  tokensOnOneLookup,
-} from "./cloud/onboarding.js";
-import { dropActivity, inWorkspace, maybeSyncInBackground, recordActivity, runSyncChild, syncRepo, syncWorkspaceRepos, workspaceLearnings } from "./cloud/workspace-sync.js";
 import type { CheckResult } from "./check/types.js";
 import { checkLocally } from "./check/local-check.js";
-import { findLearning, learningFileName, liveLearnings } from "./notes/learning-fields.js";
+import { findLearning, liveLearnings } from "./notes/learning-fields.js";
 import { savedIdLine } from "./notes/replace.js";
 import { ALWAYS_FOLLOW, isAlwaysFollow } from "./notes/units.js";
 import { alwaysFollowBacked } from "./notes/always-follow-gate.js";
@@ -101,13 +77,8 @@ import { formatOverlap, maybeRefreshBranches, overlapsWith, pushedWhen, readBran
 import { ensureRepoTrail, LEARNINGS_DIR } from "./notes/repo-trail.js";
 import type { AskResult } from "./ask/ask.js";
 import { setInputRate } from "./context/savings.js";
-import { readStamp, runningVersion, wiredHostIds, wiringOpts, writeStamp } from "./upkeep.js";
+import { readStamp, wiredHostIds, wiringOpts, writeStamp } from "./upkeep.js";
 import { shouldMoveToTrail } from "./upkeep-run.js";
-import { bundleSession, listLines, MAX_GZ_BYTES, pickSession, previewLines, redactedCount, sessionsHere, shareSessionEnabled, shortId, sizeLabel, whoIAm } from "./cloud/share-session.js";
-import { bundlePreviewLines, deleteCode, deleteHash, itemPayload, leaveOut, newCopyDir, newSentState, parseDeleteCode, parseLeaveOut, prepareBundle, readSent, unfinishedCopy, writeSent, type Manifest, type SentState } from "./cloud/share-bundle.js";
-import { trailHome } from "./notes/trail-home.js";
-import { readSyncState, runSync, syncDir, writeSyncState, type SyncState } from "./cloud/share-sync.js";
-import { hasShareSyncHook, installShareSyncHook, removeShareSyncHook, settingsPath, type HookResult } from "./cloud/share-hook.js";
 
 const program = new Command();
 const currentVersion = readCurrentVersion(import.meta.url);
@@ -117,10 +88,8 @@ const currentVersion = readCurrentVersion(import.meta.url);
  * registered, because it changes which commands exist: under trail the old
  * `graft trail …` group moves to the top level, `check` hands its name to the
  * team check (the freshness check is `build --check`), and `stats` and
- * `trail status` become one `status`. Under graft nothing moves. Trail's setup
- * prompt runs as trail whichever name started it (`asksForTrail`).
+ * `trail status` become one `status`. Under graft nothing moves.
  */
-if (asksForTrail(process.argv.slice(2))) setBrand("trail");
 const TRAIL = brand() === "trail";
 
 /** Help-screen groups under trail; graft keeps its one flat list. */
@@ -128,7 +97,6 @@ const GROUP = {
   find: "Find code · your agent runs these:",
   memory: "Learnings:",
   setup: "Setup:",
-  cloud: "Workspace · your team's view, across repos:",
   ci: "CI:",
 } as const;
 
@@ -286,16 +254,6 @@ function spelling(action: Command): string {
   return ["graft", ...words].join(" ");
 }
 
-// Hidden: spawned detached by maybeSyncInBackground when a workspace repo's
-// learnings changed, or uses are waiting to go. Running it by hand syncs now.
-program
-  .command("_trail-sync", { hidden: true })
-  .description("internal: send this repo's learnings and the waiting uses to the Trail workspace")
-  .argument("[dir]", "target repo directory", ".")
-  .action(async (dir: string) => {
-    await runSyncChild(resolve(dir));
-  });
-
 // Hidden: spawned detached by maybeRefreshBranches.
 program
   .command("_trail-branches", { hidden: true })
@@ -303,49 +261,6 @@ program
   .argument("[dir]", "target repo directory", ".")
   .action((dir: string) => {
     refreshBranches(resolve(dir), { prs: true });
-  });
-
-program
-  .command("_trail-claim", { hidden: true })
-  .description("internal: wait for a sign-in through the link trail handed the agent, then connect the workspace")
-  .action(async () => {
-    const got = await waitForConnect();
-    if (got && "cloud" in got) addAgentEntries();
-  });
-
-program
-  .command("_trail-pair", { hidden: true })
-  .description("internal: after `init --pair`, wait for the connect and the review in the browser, then upload the repo's learnings")
-  .argument("<state>")
-  .argument("<dir>")
-  .argument("[server]", "the Trail the run reported to (init's --server)")
-  .option("--resumed", "a later command's wait, after the first one ran out")
-  .action(async (state: string, dir: string, server: string | undefined, o: { resumed?: boolean }) => {
-    const base = serverUrl(server);
-    if (base) useServer(base);
-    await finishPair(state, resolve(dir), o.resumed ? { resumed: true, waitMs: WAIT_MS } : {});
-  });
-
-// Hidden: spawned detached by maybeShareSyncInBackground from the session-start
-// hook, once someone has said yes to `share-session`'s keep-sending. By hand it just
-// sends what changed, quietly.
-program
-  .command("_share-sync", { hidden: true })
-  .description("internal: send the Claude Code sessions that changed since the last share")
-  .action(async () => {
-    const s = readSyncState();
-    const cloud = s ? readClouds().find((c) => c.url === s.url) : undefined;
-    if (!s || !cloud) return;
-    await runSync({
-      home: homedir(),
-      who: whoIAm([cloud.user.name, cloud.user.email]),
-      trailVersion: runningVersion(),
-      repoOf: (cwd) => {
-        const r = workspaceRepo(cwd);
-        return r.git && !r.key.startsWith("local/") ? r.key : "";
-      },
-      send: (body) => shareSession(cloud, body),
-    });
   });
 
 // Hidden under trail, where -v says the same; listed under graft as it was.
@@ -666,14 +581,10 @@ grouped(program.command("build"), GROUP.setup)
  * After `ask`, under trail: which shown learnings are a teammate's, and the
  * lookup recorded (the learnings shown are a use, which is what the team page
  * counts as reuse; the tokens saved ride along). Then the background upkeep
- * that keeps branches and the workspace current. Spawns no git itself. Teammates' branches come up after an edit
+ * that keeps branches current. Spawns no git itself. Teammates' branches come up after an edit
  * instead, once there's a function to compare (notes/edit-overlap.ts).
  */
 function afterAsk(r: AskResult, repo: string): void {
-  // Every lookup is reported, not only ones that showed a learning: the tokens
-  // the map saved are what the team page's running total counts. A no-op unless
-  // this machine is connected and the repo is the workspace's.
-  recordLookup(r, repo);
   if (!r.notesChecked) return;
   rememberRepo(repo);
   maybeRefreshBranches(repo);
@@ -682,7 +593,6 @@ function afterAsk(r: AskResult, repo: string): void {
   if (shown.length) {
     for (const h of shown) h.note.teammate = !!h.note.author && !!me && h.note.author !== me;
   }
-  maybeSyncInBackground(repo);
 }
 
 grouped(program.command("ask"), GROUP.find)
@@ -724,7 +634,6 @@ grouped(program.command("ask"), GROUP.find)
     } else {
       const { formatAsk } = await import("./ask/ask.js");
       process.stdout.write(formatAsk(r));
-      printLines(cloudLines(dir, { command: "ask" }));
     }
   });
 
@@ -755,8 +664,8 @@ if (!TRAIL) {
       await runCheckCommand(dirArg, opts, "graft check");
     });
 }
-// Under trail, `check` is the team check (teamCheckCommand, with the cloud
-// commands below); the freshness check is `trail build --check`.
+// Under trail, `check` is the team check (teamCheckCommand); the freshness
+// check is `trail build --check`.
 
 /**
  * The freshness check: `graft check`, and `trail build --check`. `label` is how
@@ -886,13 +795,8 @@ program
   .command("mcp", { hidden: TRAIL })
   .description("Serve the graph over MCP (stdio): exposes graft_find_code, graft_trace_calls, graft_find_all, graft_file_api, graft_repo_map and graft_check_freshness as tools")
   .argument(...DIR_ARG)
-  .option("--brains", "serve only the paired Trail workspace's tools and skills (what Claude Code gets after init --connect)")
-  .action(async (dirArg: string | undefined, opts: { brains?: boolean }) => {
+  .action(async (dirArg: string | undefined) => {
     const { startMcpServer } = await import("./mcp/server.js");
-    if (opts.brains) {
-      startMcpServer(process.cwd(), undefined, currentVersion, { brainsOnly: true });
-      return;
-    }
     const dir = noteQuery(queryRoot(dirArg));
     const globalOpts = program.opts<{ dir?: string }>();
     startMcpServer(dir, globalOpts.dir, currentVersion);
@@ -1094,22 +998,10 @@ grouped(program.command("init"), GROUP.setup)
   .option("-y, --yes", "skip the picker and wire every detected agent (the pre-0.8 default)")
   .option("--no-global", "skip writes outside this repo (the ~/.codex/ config + hooks)")
   .option("--verbose", "print every file written, the graph build's own output and the closing banner")
-  .option(
-    "--connect <code>",
-    "connect this machine to your Trail workspace with the one-time code from team.trailhq.com, and send it a summary of this repo (titles, counts and names; never code)",
-  )
-  .option("--pair <code>", "the pair code from Trail's onboarding page: that page shows this run live, then you review what it found")
-  .option("--server <url>", "the Trail that gave the code (default: Trail cloud, https://team.trailhq.com)")
   .option("--plain", "look back without asking Claude to name what it finds")
   .option("--look-back", "look back at your past sessions again, for what isn't kept or closed yet")
   .action(async (dir: string, opts: InitOptions) => {
-    if (opts.connect !== undefined && opts.pair !== undefined) {
-      console.error("✗ --connect and --pair are two ways in: use the one your Trail page gave you");
-      process.exitCode = 1;
-      return;
-    }
-    if (opts.connect !== undefined) await runConnectInit(dir, opts);
-    else await runInitCommand(dir, opts);
+    await runInitCommand(dir, opts);
   });
 
 // `trail init` prints this when there was no terminal to ask on (an agent ran
@@ -1237,7 +1129,7 @@ async function runNoteCommand(repo: string, opts: NoteOptions): Promise<void> {
   const saved: Note[] = [];
   for (const t of targets) {
     earlier.push(...listNotes(t.dir));
-    // Always follow is a mark on the learning: written as kind guardrail (what older files and the cloud read), and
+    // Always follow is a mark on the learning: written as kind guardrail (what older files read), and
     // standing, so every session starts with it. Only on the person's word (always-follow-gate.ts).
     const mark = always.ok ? { kind: "guardrail" as const, standing: true } : {};
     saved.push(writeNote(t.dir, { title: opts.title, body, author, date, branch: currentBranch(t.dir), cost, touches: t.touches, replaces, src: "agent", ...mark }, scope));
@@ -1288,11 +1180,7 @@ async function runNoteCommand(repo: string, opts: NoteOptions): Promise<void> {
     console.log("· just for you: kept on this machine, out of the repo");
     if (!process.stdout.isTTY && TRAIL) console.log(`[trail] Close your reply with this line, word for word: ${PERSONAL_SAVED_LINE}`);
   }
-  for (const t of targets) {
-    rememberRepo(t.dir);
-    maybeSyncInBackground(t.dir);
-  }
-  printLines(cloudLines(repo, { command: "note" }));
+  for (const t of targets) rememberRepo(t.dir);
 }
 
 /** What the agent asks after saving a team learning it hasn't committed: who reads it, and when. */
@@ -1301,53 +1189,8 @@ export function commitAsk(title: string, about?: string): string {
   return `📝 Learning: "${title.replace(/"/g, "'")}" · your teammates' Claude reads it ${when}. Commit it with this change? (y/n)`;
 }
 
-/** Lines that close a command's output, with a blank line before them. */
-function printLines(lines: string[]): void {
-  if (lines.length) console.log(`\n${lines.join("\n")}`);
-}
-
 /** `graft init`'s flags, as commander hands them over. */
-interface InitOptions { build?: boolean; agents?: string[]; allAgents?: boolean; listAgents?: boolean; mcp?: boolean; hooks?: boolean; statusline?: boolean; dryRun?: boolean; yes?: boolean; global?: boolean; verbose?: boolean; connect?: string; pair?: string; server?: string; plain?: boolean; lookBack?: boolean }
-
-/** What `init --connect` and `--pair` hear from a run of init, as it happens: the stages the web page ticks off. */
-interface InitProgress {
-  mapped?(m: { nodes: number; edges: number; files: number }): void;
-  /** What init learned this run (team and personal), and how many past sessions it read; `notes` is empty when it learned nothing new. */
-  learned?(l: { notes: Array<{ note: Note; sessions?: number }>; sessions: number }): void;
-}
-
-/**
- * `--server <url>` on `init --connect` and `--pair`: the Trail that gave the
- * code, for the rest of this run (`useServer`, never the environment). False,
- * after saying why, when it isn't a URL.
- */
-function useServerOption(raw: string | undefined): boolean {
-  if (raw === undefined || !raw.trim()) return true;
-  const server = serverUrl(raw);
-  if (!server) {
-    console.error("✗ --server takes a URL, like https://dev.trailhq.com");
-    process.exitCode = 1;
-    return false;
-  }
-  useServer(server);
-  return true;
-}
-
-/**
- * What `init --pair` hears from init, as the onboarding page's steps: the map
- * is done when `mapped` fires, the past sessions when `learned` does. Nothing
- * to say for a run that read no sessions (that step is already marked).
- */
-function pairProgress(pair: PairRun, readsSessions = false): InitProgress {
-  return {
-    mapped: (m) => pair.phase("files", "done", m.files ? `${m.files.toLocaleString("en-US")} files` : "", m.files ? `Mapped ${m.files.toLocaleString("en-US")} files` : "Mapped the code"),
-    learned: (l) => {
-      // The session read marks the step itself, with what it found, the moment it lands.
-      if (l.sessions <= 0 || readsSessions) return;
-      pair.phase("decisions", "done", `${l.sessions} sessions`, `Read ${l.sessions} past Claude sessions`);
-    },
-  };
-}
+interface InitOptions { build?: boolean; agents?: string[]; allAgents?: boolean; listAgents?: boolean; mcp?: boolean; hooks?: boolean; statusline?: boolean; dryRun?: boolean; yes?: boolean; global?: boolean; verbose?: boolean; plain?: boolean; lookBack?: boolean }
 
 /** Repo-relative with forward slashes, for printing. */
 function shown(repo: string, path: string): string {
@@ -1357,20 +1200,8 @@ function shown(repo: string, path: string): string {
 /** Agents init knows by another id: both read AGENTS.md. */
 const AGENT_ALIASES: Record<string, string> = { codex: "agents", opencode: "agents" };
 
-/**
- * The `init --pair` run Trail's page is following, while it runs: a crash then
- * tells the page the run stopped (see the end of this file).
- */
-let livePair: PairRun | null = null;
-
 /** `graft init`. */
-async function runInitCommand(dir: string, opts: InitOptions, progress?: InitProgress): Promise<{ ids: string[]; laptop: string[] } | null> {
-    // With --pair, Trail's page is waiting on this run: one that stops before
-    // telling Trail about itself says why there, so the page doesn't wait on.
-    const stopPaired = async (reason: SetupFailure) => {
-      if (opts.pair === undefined || !validPairCode(opts.pair) || !useServerOption(opts.server)) return;
-      await failPair(trailUrl(), opts.pair, reason);
-    };
+async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: string[]; laptop: string[] } | null> {
     if (opts.listAgents) {
       for (const id of [...hostIds(), "claude"]) console.log(id);
       return null;
@@ -1383,7 +1214,6 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
     const auto = asked?.includes("auto") === true;
     if (auto && asked!.length > 1) {
       console.error("✗ --agents auto picks the agents itself: give it on its own, or name the agents instead");
-      await stopPaired("bad_agents");
       process.exit(1);
     }
     const explicit = asked && !auto ? [...new Set(asked.map((id) => AGENT_ALIASES[id] ?? id))] : undefined;
@@ -1393,26 +1223,15 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
     const refusal = homeFolderRefusal(repo);
     if (refusal) {
       console.error(refusal);
-      await stopPaired("home_folder");
       process.exitCode = 1;
       return null;
     }
-    // Trail's page shares a repo with the team: a folder that isn't one (or holds
-    // several) would be set up with nothing to share.
-    if (opts.pair !== undefined && !isGitWorkTree(repo)) {
-      console.error(NOT_GIT_PAIR_REFUSAL);
-      await stopPaired("not_git");
-      process.exitCode = 1;
-      return null;
-    }
-
     if (explicit) {
       const validIds = [...hostIds(), "claude"];
       const unknown = explicit.filter((id) => !validIds.includes(id));
       if (unknown.length) {
         console.error(`✗ unknown agent id(s): ${unknown.join(", ")}; valid: ${validIds.join(", ")}`);
-        await stopPaired("bad_agents");
-        process.exit(1);
+          process.exit(1);
       }
     }
 
@@ -1470,46 +1289,6 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
       return null;
     }
 
-    // With --pair, Trail's onboarding page is waiting on this run: tell it
-    // first, so the person can sign up while the rest of init runs.
-    let pair: PairRun | null = null;
-    if (opts.pair !== undefined) {
-      if (!useServerOption(opts.server)) return null;
-      if (!validPairCode(opts.pair)) {
-        console.error(`✗ --pair takes the code from Trail's onboarding page, got "${opts.pair}"`);
-        process.exitCode = 1;
-        return null;
-      }
-      const started = await PairRun.start(repo, opts.pair, { agent: autoSel ? autoSel.agent : asked?.[0] ?? ids[0]!, version: currentVersion });
-      if ("error" in started && started.status === undefined) {
-        // No answer at all: most often an agent that runs commands with the
-        // network off (Codex does unless asked). Setting up here would leave
-        // Trail's page waiting on a run it never hears of, so stop and say how.
-        const what = started.error.startsWith("Trail ") ? `Trail at ${trailUrl()}${started.error.slice("Trail".length)}` : `couldn't reach Trail at ${trailUrl()}`;
-        console.error(
-          `✗ ${what}, so Trail's page can't follow this setup.\n` +
-            "  If you run commands without network access (a sandbox), run this same command again with network access.\n" +
-            "  Otherwise check the VPN or proxy, then run it again.",
-        );
-        process.exitCode = 1;
-        return null;
-      }
-      if ("error" in started) {
-        console.error(`⚠ couldn't tell Trail about this run (${started.error}); setting up here anyway`);
-      } else {
-        pair = started;
-        livePair = started;
-        // An agent whose tool call runs out of time ends init with SIGTERM: say the run stopped, briefly, then go.
-        process.once("SIGTERM", () => {
-          const said = livePair ? livePair.fail("crashed") : Promise.resolve();
-          void Promise.race([said, new Promise((ok) => setTimeout(ok, 3_000))]).finally(() => process.exit(143));
-        });
-        console.error(`· Trail's page is following along · ${started.url}`);
-      }
-      // Started as graft or by an old shim (asksForTrail): the repo is set up for trail, whose commands its agents get told to run.
-      if (!trailOnPath()) console.error(`⚠ the trail command isn't installed here · npm install -g ${PACKAGE_FOR.trail} so your agents can run it`);
-    }
-
     const wantClaude = ids.includes("claude");
     const cliPath = fileURLToPath(import.meta.url);
 
@@ -1534,32 +1313,8 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
     // up at the end. Nothing is kept without a tick (see src/init/review.ts).
     const tty = Boolean(process.stdin.isTTY && process.stderr.isTTY);
     // Past Claude sessions are on this laptop only where Claude Code is.
-    const lookBack = TRAIL && wantClaude && (!laptop || laptop.includes("claude")) ? beginLookBack(repo, { plain: opts.plain === true, again: opts.lookBack === true, pair: pair !== null }) : null;
+    const lookBack = TRAIL && wantClaude && (!laptop || laptop.includes("claude")) ? beginLookBack(repo, { plain: opts.plain === true, again: opts.lookBack === true }) : null;
     for (const line of lookBack?.lines ?? []) console.error(line);
-    if (pair) {
-      const sessions = lookBack?.reads.sessions;
-      if (sessions) {
-        pair.phase("decisions", "running", "", "Reading what was decided in past Claude sessions");
-        const run = pair;
-        void sessions.result.then(
-          (r) =>
-            r.reason === "no_claude" || r.reason === "failed"
-              ? run.phase("decisions", "done", "skipped", "Claude Code couldn't read past sessions this time")
-              : r.reason === "no_sessions"
-                ? run.phase("decisions", "done", "none here", "No past Claude sessions here")
-                : run.phase("decisions", "done", `${r.findings.length} learning${r.findings.length === 1 ? "" : "s"}`, `Read ${r.read} past Claude session${r.read === 1 ? "" : "s"}: ${r.findings.length} learning${r.findings.length === 1 ? "" : "s"}`),
-          () => run.phase("decisions", "done", "skipped"),
-        );
-      } else if (lookBack?.reads.lb) pair.phase("decisions", "running", "", "Reading past Claude sessions");
-      else pair.phase("decisions", "done", "skipped");
-      if (lookBack?.reads.reviews) pair.phase("prs", "running", "", "Reading pull requests");
-      else pair.phase("prs", "done", "skipped");
-      // Each learning on the page the moment a read checks it, not when init is done.
-      const run = pair;
-      const author = noteAuthor(repo);
-      lookBack?.reads.live.listen((l) => run.learning(l, author));
-    }
-
     if (children.length)
       console.error(`· workspace: wiring ${repo} and ${children.length} child repo(s): ${children.join(", ")}`);
 
@@ -1571,15 +1326,12 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
       if (verbose && target !== repo) console.error(`\n· ${relative(repo, target)}/`);
       reports.push(wireTarget(target, ids, { home, cliPath, plan, opts, wantClaude, quiet: !verbose, laptop }));
     }
-    // The agents now working on this laptop, for Trail's page, as soon as they are.
-    if (pair && autoSel) pair.findings({ agents: autoSel.agents });
     if (verbose && autoSel) console.error(`✓ ${autoSummary(autoSel.agents)}`);
 
     // The graph, built once after the wiring: a workspace parent's build is
     // the workspace build, so it covers every child.
     let graphLine: string | null = null;
     if (!verbose) {
-      pair?.phase("files", "running", "", "Mapping the code");
       const res = await buildGraphWithProgress(repo, { build: opts.build, cliPath });
       for (const m of res.messages) console.error(m);
       const existing = res.built ? null : loadGraphCached(contextDirFor(repo, children.length ? undefined : program.opts<GlobalOpts>().dir));
@@ -1601,27 +1353,6 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
     // After the graph build too: it adds the map's ignore lines (`.trail/.gitignore` under trail, `.gitignore` and `.ignore`
     // under graft), and those are init's writes.
     recordInit(installSnaps);
-
-    // --pair hears the same stages --connect does; only the ones InitProgress
-    // has no slot for (a read starting, the PR read, nothing to read) stay inline.
-    const report: InitProgress | undefined = pair ? pairProgress(pair, Boolean(lookBack?.reads.sessions)) : progress;
-    if (report?.mapped) {
-      const g = loadGraphCached(contextDirFor(repo, children.length ? undefined : program.opts<GlobalOpts>().dir));
-      report.mapped({
-        nodes: g?.meta.nodeCount ?? 0,
-        edges: g?.meta.edgeCount ?? 0,
-        files: g ? g.nodes.filter((n) => n.kind === "file").length : 0,
-      });
-    }
-
-    // With --pair, one lookup measured against reading the files whole: the
-    // page's token step. It needs the map, so it follows the build.
-    let tokens: ReturnType<typeof tokensOnOneLookup> = null;
-    if (pair) {
-      pair.phase("tokens", "running", "", "Measuring one lookup against reading the files");
-      tokens = tokensOnOneLookup(repo, { contextDir: program.opts<GlobalOpts>().dir });
-      pair.tokensDone(tokens);
-    }
 
     if (!verbose) {
       // Warnings and removals in full, whatever else is folded.
@@ -1647,12 +1378,8 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
     // are, and how many there already are.
     let learnedNow = false;
     let teamSaved = 0;
-    // What the look-back read, for the --pair and --connect pages, and the skills it found (--pair names them).
-    let sessionsRead = 0;
-    let skillsFound: FoundSkill[] = [];
     if (lookBack) {
-      // With --pair the person reviews what was found on Trail's page, so no screen here, as with no terminal.
-      const screen = tty && !pair;
+      const screen = tty;
       const learned = await finishLookBack(repo, lookBack.reads, { yes: opts.yes === true, verbose: opts.verbose === true, say: (l) => console.error(l), ...(screen ? { io: { stdin: process.stdin, stdout: process.stderr } } : {}) });
       // #662's lines for the team rows it kept with no screen, in its words.
       const { fromReviews, fromSessions, fromMemory } = learned.teamKept ?? { fromReviews: null, fromSessions: null, fromMemory: null };
@@ -1675,16 +1402,6 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
         console.error(`✓ kept ${fromMemory.saved.length} of the ${fromMemory.offered} notes your Claude keeps about this repo`);
         for (const note of fromMemory.saved) console.error(`    ${note.scope === "personal" ? "just for you " : "for your team"} · ${note.title}`);
       }
-      sessionsRead = learned.read?.sessions ?? 0;
-      skillsFound = learned.skills ?? [];
-      const prs = learned.read?.prs;
-      if (pair && prs !== undefined && prs !== null) {
-        const n = fromReviews?.saved.length ?? 0;
-        pair.phase("prs", "done", `${prs} PRs`, `Read ${prs} merged PRs: ${n} learning${n === 1 ? "" : "s"}`);
-      }
-      // The team learnings kept with no screen, said in no past session; after a screen the page lists the repo's own.
-      const notes = [...(fromReviews?.saved ?? []), ...(fromSessions?.saved ?? []), ...(fromMemory?.saved ?? [])].map((note) => ({ note, sessions: 0 }));
-      report?.learned?.({ notes, sessions: sessionsRead });
       learnedNow = learned.kept > 0;
       teamSaved = learned.team;
       if (learnedNow) {
@@ -1692,8 +1409,6 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
         if (learned.inRepo) console.error(commitLines({}, teammatesOn(repo), "repo").uncommitted);
       }
     }
-    // Not looked back (not trail, or not Claude Code): the page still gets its stage.
-    if (!lookBack) report?.learned?.({ notes: [], sessions: 0 });
     if (TRAIL && !learnedNow) {
       const home = notesHome.get(repo);
       if (home) {
@@ -1748,30 +1463,9 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
           edges: graphs.reduce((n, g) => n + g.meta.edgeCount, 0),
         }),
     );
-    // Hand what was found to the review page, and leave a child waiting for
-    // the person to connect and review there.
-    if (pair) {
-      // Teammates' branches on this person's files, checked against the
-      // learnings just saved and the repo's own: synchronous, so the finding
-      // exists before the page is told the read is done.
-      pair.phase("team", "running", "", "Checking your team's branches");
-      const teamNotes = listNotes(repo, { branches: false }).filter((n) => n.scope === "repo" && !n.ref);
-      // No remote (or no default branch) means nothing was checked: `teammates`
-      // is left out, since an empty list would say "checked, none".
-      const teammates = teammatesChecked(repo, { learnings: teamNotes });
-      pair.teamDone(teammates);
-      pair.findings({ tokens, sessions: lookBack?.reads.lb ? sessionsRead : undefined, teammates, ...(autoSel ? { agents: autoSel.agents } : {}) });
-      await pair.finish(repo, skillsFound);
-      livePair = null;
-      pair.handOff(repo);
-      console.error(`✓ Trail has what it found · review it in the browser: ${pair.url}`);
-      if (!process.stdout.isTTY) console.error(`[trail] Tell the user, in one line: their Trail page has moved on; review what Trail found there. If it isn't open, the link is ${pair.url}`);
-    }
-
     // Run by an agent, not a person: the last line tells it to ask about the
     // commit, since the person never saw the picker and Claude Code folds the rest.
-    // With --pair the person reviews them on the Trail page first, so no ask here.
-    if (teamSaved && !pair && !process.stderr.isTTY)
+    if (teamSaved && !process.stderr.isTTY)
       console.error(
         `→ ${teamSaved} team learning${teamSaved === 1 ? "" : "s"} in ${LEARNINGS_DIR}/ ${teamSaved === 1 ? "isn't" : "aren't"} committed yet. Ask the user: "Commit ${teamSaved === 1 ? "it" : `the ${teamSaved}`} so your teammates' Claude starts from ${teamSaved === 1 ? "it" : "them"}? (yes / no)"`,
       );
@@ -1783,98 +1477,6 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
 function laptopOnly(plan: ReturnType<typeof planInit>, laptop: string[] | undefined): ReturnType<typeof planInit> {
   if (!laptop) return plan;
   return plan.map((p) => (laptop.includes(p.id) ? p : { ...p, writes: p.writes.filter((w) => w.scope === "repo") }));
-}
-
-/**
- * `trail init --connect <CODE>`: the onboarding on team.trailhq.com. Claims the
- * one-time code (a wrong or spent one stops here, before anything is written),
- * saves the workspace token where `trail login` keeps it, then runs init as
- * usual while the page ticks off connected, mapped and learned. At the end,
- * one summary of the repo goes up (a lookup's tokens saved, the learnings'
- * titles, teammates' branches from git: never code, diffs or session text),
- * then `done`. Offline, init still sets the repo up and says how to connect.
- */
-async function runConnectInit(dir: string, opts: InitOptions): Promise<void> {
-  if (opts.listAgents || opts.dryRun) {
-    if (opts.dryRun) console.error("· --dry-run: not connecting");
-    await runInitCommand(dir, opts);
-    return;
-  }
-  const repo = resolve(dir);
-  if (!useServerOption(opts.server)) return;
-  const base = trailUrl();
-  const code = normalizeCode(opts.connect ?? "");
-  if (!code) {
-    console.error(`✗ "${opts.connect ?? ""}" isn't a Trail code · it looks like TRL-7F2A-K9QD, from ${base}/welcome/code`);
-    process.exitCode = 1;
-    return;
-  }
-  const ref = repoRef(repo);
-  const machine = machineName();
-  const got = await claimConnectCode(base, code, { machine, repo: ref });
-  const cloud = "cloud" in got ? got.cloud : null;
-  if ("cloud" in got) {
-    const cloud = got.cloud;
-    writeCloud(cloud);
-    // A sign-in link out from before is moot now.
-    clearPending();
-    console.error(`✓ connected to workspace ${cloud.workspace.name}`);
-  } else if (got.reason === "invalid") {
-    console.error(`✗ ${got.error} · get a new code at ${base}/welcome/code`);
-    process.exitCode = 1;
-    return;
-  } else {
-    console.error(offlineLine(got.error, base, code, cmd("graft init")));
-  }
-  const reporter = cloud ? new OnboardingReporter(cloud, ref, { machine }) : null;
-  void reporter?.stage("connected");
-
-  // What init learned this run, kept for the summary.
-  const heard: { notes: Array<{ note: Note; sessions?: number }>; sessions: number } = { notes: [], sessions: 0 };
-  const progress: InitProgress | undefined = reporter
-    ? {
-        mapped: (m) => void reporter.stage("mapped", m),
-        learned: (l) => {
-          Object.assign(heard, l);
-          const team = learningsSummary(repo, l.notes);
-          void reporter.stage("learned", { learnings: team.length, sessions: l.sessions || Math.max(0, ...team.map((t) => t.sessions)) });
-        },
-      }
-    : undefined;
-  // The page's command is pasted into a terminal, but an agent may run it for
-  // them: with no terminal to pick in, wire the agents this machine has.
-  const interactive = process.stdin.isTTY && process.stderr.isTTY;
-  const res = await runInitCommand(dir, interactive ? opts : { ...opts, yes: true }, progress);
-  if (!reporter || !cloud) return;
-  if (!res) {
-    await reporter.flush();
-    return;
-  }
-
-  // What Trail found, for the page: route B, summaries only.
-  const learnings = learningsSummary(repo, heard.notes);
-  const sessions = heard.sessions || Math.max(0, ...learnings.map((l) => l.sessions));
-  const tokens = tokensOnOneLookup(repo, { contextDir: program.opts<GlobalOpts>().dir });
-  const teamNotes = listNotes(repo, { branches: false }).filter((n) => n.scope === "repo" && !n.ref);
-  const teammates = teammatesFromGit(repo, { learnings: teamNotes });
-  const sent = await reporter.summary({ tokens, ...(sessions ? { sessions } : {}), learnings, teammates });
-  await reporter.stage("done");
-  await reporter.flush();
-  // Claude Code gets the workspace's tools and skills through one user-level `trail` entry.
-  const brainsEntry = res.laptop.includes("claude") && opts.global !== false ? installBrainsServer(homedir()) : null;
-  if (sent) {
-    const parts = [
-      tokens ? `one lookup saved ${tokens.pct}% of the tokens` : null,
-      `${learnings.length} learning${learnings.length === 1 ? "" : "s"}`,
-      `${teammates.length} teammate branch${teammates.length === 1 ? "" : "es"} on your files`,
-    ].filter(Boolean);
-    console.error(`✓ sent ${cloud.workspace.name} a summary: ${parts.join(", ")} · titles, counts and names only, no code`);
-    console.error(`· see what Trail found: ${base}/welcome/code/found`);
-  } else {
-    console.error(`· couldn't send the summary to Trail this time · with a new code from ${base}/welcome/code, ${connectAgain(cmd("graft init"), "<code>", base)} sends it again`);
-  }
-  if (brainsEntry?.action === "created" || brainsEntry?.action === "updated")
-    console.error(`✓ Claude Code gets your team's learnings and skills in every project · restart it to pick them up`);
 }
 
 /** What one target's wiring did, for the compact summary to report. */
@@ -2063,654 +1665,10 @@ grouped(program.command("uninstall"), GROUP.setup)
   });
 
 
-/* -------------------------------------------------------------------------- */
-/* trail login · logout · workspace                                           */
-/* -------------------------------------------------------------------------- */
-
-/**
- * `trail login`: sign this laptop in to a Trail workspace through the
- * browser. No code to copy: the link carries a fresh state, the person signs
- * in and allows it there, and this laptop claims its own token. In a
- * terminal it opens the browser and waits. Run by an agent, it prints the
- * link for the agent's reply and leaves a background wait to finish it, so
- * the agent never sits blocked. `--workspace` (or the repo's
- * `.trail/workspace.json`) picks the workspace on that page. A laptop
- * already signed in links another repo the same way, to the same
- * workspace or another one: each repo goes to one workspace.
- *
- * `--code` skips the browser: Trail's web app made the one-time code for the
- * person already signed in there, so the laptop trades it for its token
- * straight away.
- */
-function loginCommand(name = "login"): Command {
-  return new Command(name)
-    .description("Sign this laptop in to Trail (team.trailhq.com), in the browser: every coding agent here gets your workspace's brand, skills and learnings")
-    .argument("[dir]", "the repo to add", ".")
-    .option("--code <code>", "a one-time sign-in code from Trail's web app (TRL-…): signs in with no browser step")
-    .option("--workspace <slug>", "the workspace to sign in to, as its page names it (default: this repo's, if it has one)")
-    .option("--server <url>", "a self-hosted Trail, e.g. https://trail.acme.internal (default: Trail cloud, https://team.trailhq.com)")
-    .action(async (dir: string, opts: { server?: string; workspace?: string; code?: string }) => {
-      const repo = resolve(dir);
-      // Saved on the link, so its sign-in and every upload after go there; nothing in the environment.
-      const server = opts.server === undefined ? undefined : serverUrl(opts.server);
-      if (server === null) {
-        console.error(`✗ --server takes a URL, like https://trail.acme.internal`);
-        process.exitCode = 1;
-        return;
-      }
-      if (opts.code !== undefined) {
-        await loginWithCode(repo, opts.code, server ?? trailUrl());
-        return;
-      }
-      const slug = opts.workspace?.trim().toLowerCase() || (server ? undefined : teamWorkspace(repo)?.workspace);
-      // The workspace this repo goes to: a laptop signed in elsewhere still links this one.
-      const here = workspaceRepo(repo);
-      const cloud = here.git ? cloudForRepo(here.key) : readCloud();
-      if (cloud) {
-        if (slug && slug !== cloud.workspace.slug) {
-          console.error(`✗ this repo goes to workspace ${cloud.workspace.name} · run ${cmd("graft logout")} --workspace ${cloud.workspace.slug}, then ${cmd("graft login")} --workspace ${slug}`);
-          process.exitCode = 1;
-          return;
-        }
-        addAgentEntries();
-        console.error(`✓ already signed in to workspace ${cloud.workspace.name} · ${cloud.workspace.url}`);
-        return;
-      }
-      rememberRepo(repo);
-      const url = loginLink(repo, process.env, Date.now(), server, slug);
-      if (!process.stdout.isTTY) {
-        printLines(loginLines(url, slug));
-        startWaiting();
-        return;
-      }
-      console.error(`· sign in to Trail in your browser:\n  ${url}`);
-      openBrowser(url);
-      console.error("· waiting for you to sign in · ctrl-c stops");
-      const got = await waitForConnect({ waitMs: 10 * 60 * 1000 });
-      if (got && "cloud" in got) {
-        addAgentEntries();
-        printLines(cloudLines(repo, { command: "note", agent: false }));
-      } else if (got && "error" in got) {
-        console.error(`✗ ${got.error} · run ${cmd("graft login")} again for a new link`);
-        process.exitCode = 1;
-      } else console.error(`· not signed in yet · the link stays good for a day`);
-    });
-}
-
-/** `trail login --code`: trade the web app's one-time code for this laptop's token, then set up its agents. */
-async function loginWithCode(repo: string, code: string, base: string): Promise<void> {
-  const before = readCloud();
-  const got = await claimLoginCode(base, code.trim());
-  if ("error" in got) {
-    console.error(`✗ ${got.error}`);
-    process.exitCode = 1;
-    return;
-  }
-  const cloud: Cloud = { ...got.cloud, url: base, linkedAt: Date.now() };
-  if (before && (before.workspace.slug !== cloud.workspace.slug || before.url !== base)) {
-    console.error(`· this laptop is also signed in to workspace ${before.workspace.name}; each repo goes to one of them (${cmd("graft workspace")})`);
-  }
-  // Nothing recorded before signing in goes up.
-  if (!before) dropActivity();
-  writeCloud(cloud);
-  // A sign-in link out from before is moot now.
-  clearPending();
-  rememberRepo(repo);
-  addAgentEntries();
-  const sent = await syncWorkspaceRepos(cloud).catch(() => ({ repos: 0, learnings: 0 }));
-  console.log(`✓ this laptop is signed in to Trail workspace ${cloud.workspace.name} · ${cloud.workspace.url}`);
-  if (sent.repos) console.log(`✓ shared ${sent.learnings} learning${sent.learnings === 1 ? "" : "s"} from ${sent.repos} repo${sent.repos === 1 ? "" : "s"}`);
-  if (!process.stdout.isTTY) {
-    console.log(
-      `[${brand()}] Tell the user, in one line, that this laptop is signed in to their Trail workspace ${cloud.workspace.name}: Claude Code, Codex and Cursor here have its brand, skills and learnings from their next session. Don't repeat the code.`,
-    );
-  }
-}
-
-/**
- * Once this laptop is signed in, every coding agent installed on it gets the
- * workspace's tools in every project, with nothing more to run: Claude Code
- * and Cursor through a user-level workspace-only `trail` server, Codex
- * through its user-level `trail` server (the one `trail init` writes, which
- * passes the workspace through once signed in). Only for agents installed
- * here. Best effort.
- */
-function addAgentEntries(): void {
-  const home = homedir();
-  try {
-    if (existsSync(join(home, ".claude.json")) || existsSync(join(home, ".claude"))) installBrainsServer(home);
-    if (existsSync(join(home, ".cursor"))) installCursorBrainsServer(home);
-    if (existsSync(join(home, ".codex"))) upsertCodexToml("codex", join(home, ".codex", "config.toml"), "trail");
-  } catch {
-    // a config that can't be written leaves that agent as it was
-  }
-}
-
-function logoutCommand(name = "logout"): Command {
-  return new Command(name)
-    .description("Disconnect this machine from its Trail workspaces (learnings stay in your repos)")
-    .option("--workspace <slug>", "disconnect only this workspace (trail workspace lists them)")
-    .action((opts: { workspace?: string }) => {
-      const all = readClouds();
-      if (opts.workspace !== undefined) {
-        const gone = all.find((c) => c.workspace.slug === opts.workspace);
-        if (!gone || !clearCloud(process.env, opts.workspace)) {
-          console.error(`✗ not connected to a workspace "${opts.workspace}" · ${cmd("graft workspace")} lists them`);
-          process.exitCode = 1;
-          return;
-        }
-        if (all.length === 1) {
-          clearPending();
-          removeBrainsServer(homedir());
-          removeCursorBrainsServer(homedir());
-        }
-        console.error(`✓ disconnected from workspace ${gone.workspace.name} · learnings stay in your repos' .trail/`);
-        return;
-      }
-      clearPending();
-      removeBrainsServer(homedir());
-      removeCursorBrainsServer(homedir());
-      if (!clearCloud()) {
-        console.error("· not connected to a workspace");
-        return;
-      }
-      const names = all.map((c) => c.workspace.name).join(", ");
-      console.error(`✓ disconnected from workspace${all.length > 1 ? "s" : ""} ${names} · learnings stay in your repos' .trail/`.replace("  ", " "));
-    });
-}
-
-const INTERNAL_ONLY = "✗ internal only: share-session is for the Trail team, signed in to team.trailhq.com with a trailhq.com or nanonets.com email";
-
-/**
- * The connection that may send sessions: one Trail says yes to, which it
- * decides by the signed-in email. This repo's workspace is asked first. Null
- * after saying why there is none.
- */
-async function shareCloud(repoKey: string | null): Promise<Cloud | null> {
-  const all = readClouds();
-  const mine = repoKey ? cloudIn(all, repoKey) : null;
-  let failed: string | null = null;
-  for (const c of mine ? [mine, ...all.filter((x) => x !== mine)] : all) {
-    const ok = await shareAllowed(c);
-    if (ok === true) return c;
-    if (isError(ok)) failed = ok.error;
-  }
-  console.error(failed ? `✗ couldn't check with Trail · ${failed}` : INTERNAL_ONLY);
-  process.exitCode = 1;
-  return null;
-}
-
-/** Ask on the terminal for a line; a closed input is null. */
-function askLine(question: string): Promise<string | null> {
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  return new Promise((done) => {
-    let answered = false;
-    rl.on("close", () => answered || done(null));
-    rl.question(question, (a) => {
-      answered = true;
-      rl.close();
-      done(a.trim());
-    });
-  });
-}
-
-/** Ask on the terminal; only `y` or `yes` is a yes, and a closed input is a no. */
-async function askYes(question: string): Promise<boolean> {
-  return /^y(es)?$/i.test((await askLine(question)) ?? "");
-}
-
-/** `~/…` for a path in the home folder, as the person reads it. */
-function homePath(p: string): string {
-  const home = homedir();
-  return p === home || p.startsWith(home + sep) ? `~${p.slice(home.length)}` : p;
-}
-
-/** A copy prepared longer ago than this isn't what the person saw today: it's prepared again. */
-const COPY_FRESH_MS = 24 * 60 * 60 * 1000;
-
-function shareSessionCommand(name = "share-session"): Command {
-  return new Command(name)
-    .description("Send your Claude to the Trail team for the team-memory experiment, and keep sending: the last 30 days of sessions, your setup and memory, then each new session, secrets and your name taken out (Trail team only)")
-    .argument("[session]", "send only this one of this folder's sessions: its number in --list, or its id")
-    .option("--list", "list this folder's sessions, newest first")
-    .option("--days <n>", "how many days of sessions to take", "30")
-    .option("--leave-out <numbers>", 'with --yes: folder numbers from the summary to leave out, like "3 7"')
-    .option("--yes", "send without asking: only after the person said yes to what it showed")
-    .option("--once", "send once: the last 30 days, and nothing after")
-    // Sending on is the default now; --sync, its old switch, still works.
-    .addOption(new Option("--sync").hideHelp())
-    .option("--stop", "stop sending: nothing more goes after this")
-    .option("--delete <code>", "take back everything sent under this delete code, and stop sending")
-    .action(async (pick: string | undefined, opts: { list?: boolean; days: string; leaveOut?: string; yes?: boolean; delete?: string; once?: boolean; stop?: boolean }) => {
-      const dir = process.cwd();
-      const here = workspaceRepo(dir);
-      // Taking back and stopping work without the flag: someone who tried it must always be able to undo it.
-      if (opts.stop) return stopSync(here.checkout);
-      if (!opts.delete && !shareSessionEnabled()) {
-        console.error(`✗ share-session isn't on in this release yet; to try it, run TRAIL_SHARE_SESSION=1 ${cmd("graft share-session")}`);
-        process.exitCode = 1;
-        return;
-      }
-      const repoKey = here.git && !here.key.startsWith("local/") ? here.key : null;
-      const cloud = await shareCloud(repoKey);
-      if (!cloud) return;
-      if (opts.delete) return deleteShared(cloud, opts.delete, here.checkout);
-      if (opts.list) {
-        const sessions = sessionsHere(dir);
-        console.log(listLines(sessions).join("\n"));
-        if (sessions.length) console.log(`· send one: ${cmd("graft share-session")} <number>`);
-        return;
-      }
-      if (pick) return shareOneSession(cloud, pick, !!opts.yes, here.checkout, repoKey);
-      const days = Number(opts.days);
-      if (!Number.isInteger(days) || days < 1 || days > 365) {
-        console.error("✗ --days takes a whole number of days, 1 to 365");
-        process.exitCode = 1;
-        return;
-      }
-      const sync = !opts.once;
-      if (sync) {
-        const on = readSyncState();
-        if (on && !on.stoppedAt) return console.log(syncStatusLines(on).join("\n"));
-      }
-      return shareWholeClaude(cloud, { days, leaveOut: opts.leaveOut, yes: !!opts.yes, sync }, here.checkout);
-    });
-}
-
-/** One session from this folder, as before: shown, then sent on a yes. */
-async function shareOneSession(cloud: Cloud, pick: string, yes: boolean, checkout: string, repoKey: string | null): Promise<void> {
-  const sessions = sessionsHere(process.cwd());
-  const session = pickSession(sessions, pick);
-  if (!session) {
-    console.error(sessions.length ? `✗ no session "${pick}" here · ${cmd("graft share-session")} --list shows them` : "✗ no Claude Code sessions for this folder yet");
-    process.exitCode = 1;
-    return;
-  }
-  const bundle = bundleSession(session, whoIAm([cloud.user.name, cloud.user.email]));
-  if (bundle.gz.length > MAX_GZ_BYTES) {
-    console.error(`✗ this session is too big to send: ${sizeLabel(bundle.gz.length)} zipped, and Trail takes up to ${sizeLabel(MAX_GZ_BYTES)}`);
-    process.exitCode = 1;
-    return;
-  }
-  console.log(previewLines(bundle, { workspace: cloud.workspace.name, url: cloud.url }).join("\n"));
-  console.log("");
-  const interactive = process.stdin.isTTY && process.stderr.isTTY;
-  if (!yes && !interactive) {
-    console.log(`· nothing sent. Show the person what's above; only if they say yes, run ${cmd("graft share-session")} ${shortId(session)} --yes`);
-    return;
-  }
-  if (!yes && !(await askYes("Send this whole session, every message, tool call and result, to the Trail team? [y/N] "))) {
-    console.error("· nothing sent");
-    return;
-  }
-  const s = newSentState();
-  const sent = await shareSession(cloud, {
-    bundle_id: s.bundleId,
-    kind: "session",
-    delete_hash: deleteHash(s.secret),
-    session_id: session.id,
-    repo: repoKey ?? "",
-    trail_version: runningVersion(),
-    title: bundle.title,
-    messages: bundle.messages,
-    subagents: bundle.subagents,
-    bytes: bundle.bytes,
-    redacted: redactedCount(bundle),
-    transcript_gz: bundle.gz.toString("base64"),
-  });
-  if (isError(sent)) {
-    console.error(`✗ couldn't send it · ${sent.error}`);
-    process.exitCode = 1;
-    return;
-  }
-  console.error(`✓ sent ${shortId(session)} to the Trail team (${sizeLabel(bundle.gz.length)}) · thank you: it goes into the team-memory experiment`);
-  console.error(`· take it back any time: ${cmd("graft share-session")} --delete ${deleteCode(s)}`);
-}
-
-/**
- * The whole Claude: every session from the last `days` days, the setup and
- * the memory notes. Scrubbed into a copy under `~/.trail/share/` first; the
- * person reads it and says yes, no, or which folders to leave out. Without a
- * terminal (an agent ran it) it stops after the summary, and `--yes` later
- * sends that same copy.
- */
-async function shareWholeClaude(cloud: Cloud, opts: { days: number; leaveOut?: string; yes: boolean; sync: boolean }, checkout: string): Promise<void> {
-  const root = join(trailHome(), "share");
-  const tty = !!(process.stdin.isTTY && process.stderr.isTTY);
-  const earlier = unfinishedCopy(root);
-
-  if (earlier?.sent && tty && !opts.yes) {
-    const left = earlier.manifest.items.filter((it) => !earlier.sent!.sent.includes(it.id)).length;
-    console.log(`An earlier send stopped with ${left} of ${earlier.manifest.items.length} items left (${homePath(earlier.dir)}).`);
-    if (await askYes("Send the rest? [y/N] ")) await sendCopy(cloud, earlier.dir, earlier.manifest, earlier.sent, checkout, opts.sync);
-    else console.error("· nothing sent");
-    return;
-  }
-  if (opts.yes && earlier && (earlier.sent || Date.now() - earlier.manifest.createdAt < COPY_FRESH_MS)) {
-    let m = earlier.manifest;
-    if (opts.leaveOut && !earlier.sent) {
-      const ns = parseLeaveOut(opts.leaveOut, m);
-      if (!ns) {
-        console.error(`✗ --leave-out takes folder numbers from the summary, like "3 7"; nothing sent`);
-        process.exitCode = 1;
-        return;
-      }
-      m = leaveOut(earlier.dir, m, ns);
-    }
-    await sendCopy(cloud, earlier.dir, m, earlier.sent ?? newSentState(), checkout, opts.sync);
-    return;
-  }
-
-  // Nothing prepared yet, so it's prepared and shown: never sent unseen, --yes or not.
-  const out = newCopyDir(root);
-  const who = whoIAm([cloud.user.name, cloud.user.email]);
-  if (!tty) console.error(`· scrubbing your Claude Code sessions from the last ${opts.days} days, your setup and memory…`);
-  let m = prepareBundle({
-    days: opts.days,
-    home: homedir(),
-    who,
-    out,
-    repoOf: (cwd) => {
-      const r = workspaceRepo(cwd);
-      return r.git && !r.key.startsWith("local/") ? r.key : "";
-    },
-    onProgress: tty ? (done, total) => process.stderr.write(`\r· scrubbing sessions: ${done} of ${total}`) : undefined,
-  });
-  if (tty) process.stderr.write("\n");
-  const again = `${cmd("graft share-session")}${opts.sync ? "" : " --once"}`;
-  const show = () => {
-    console.log(bundlePreviewLines(m, homePath(out), cloud, opts.sync ? { sync: `${cmd("graft share-session")} --stop` } : {}).join("\n"));
-    console.log("");
-  };
-  show();
-  if (!tty) {
-    console.log(`· nothing sent. Show the person what's above and the copy at ${homePath(out)}; only if they say yes, run ${again} --yes, with --leave-out "<numbers>" for any folders they want out`);
-    return;
-  }
-  const declined = () => {
-    rmSync(out, { recursive: true, force: true });
-    console.error("· nothing sent, and the copy is deleted");
-  };
-  const all = opts.sync ? "Send all of this, and keep sending?" : "Send all of this?";
-  for (;;) {
-    const a = await askLine(`${all} y · n · or folder numbers to leave out (like 3 7): `);
-    if (a === null || /^(n|no)?$/i.test(a)) return declined();
-    if (/^y(es)?$/i.test(a)) return void (await sendCopy(cloud, out, m, newSentState(), checkout, opts.sync));
-    const ns = parseLeaveOut(a, m);
-    if (!ns) {
-      console.error("· answer y, n, or folder numbers from the list");
-      continue;
-    }
-    m = leaveOut(out, m, ns);
-    show();
-    if (await askYes(opts.sync ? "Send the rest, and keep sending? [y/N] " : "Send the rest? [y/N] ")) return void (await sendCopy(cloud, out, m, newSentState(), checkout, opts.sync));
-    return declined();
-  }
-}
-
-function bundleGz(m: Manifest): number {
-  return m.items.reduce((n, it) => n + it.gzBytes, 0);
-}
-
-/** Send what's left of a copy, one item at a time, writing down each as it lands. */
-async function sendCopy(cloud: Cloud, dir: string, m: Manifest, sent: SentState, checkout: string, sync = false): Promise<boolean> {
-  writeSent(dir, sent);
-  const tty = process.stderr.isTTY;
-  const total = m.items.length;
-  let n = sent.sent.length;
-  for (const it of m.items) {
-    if (sent.sent.includes(it.id)) continue;
-    const r = await shareSession(cloud, {
-      bundle_id: sent.bundleId,
-      kind: it.kind,
-      delete_hash: deleteHash(sent.secret),
-      session_id: it.id,
-      repo: it.repo,
-      trail_version: runningVersion(),
-      title: it.title,
-      messages: it.messages,
-      subagents: it.subagents,
-      bytes: it.bytes,
-      redacted: it.redacted,
-      transcript_gz: itemPayload(dir, it),
-    });
-    if (isError(r)) {
-      if (tty) process.stderr.write("\n");
-      console.error(`✗ couldn't send it · ${r.error}`);
-      console.error(`· ${n} of ${total} went; run ${cmd("graft share-session")} again to send the rest${n ? `, or take back what went with --delete ${deleteCode(sent)}` : ""}`);
-      process.exitCode = 1;
-      return false;
-    }
-    sent.sent.push(it.id);
-    writeSent(dir, sent);
-    n++;
-    if (tty) process.stderr.write(`\r· sent ${n} of ${total}`);
-  }
-  if (tty) process.stderr.write("\n");
-  sent.finishedAt = Date.now();
-  writeSent(dir, sent);
-  const gz = bundleGz(m);
-  console.error(`✓ sent your Claude to the Trail team: ${total} item${total === 1 ? "" : "s"}, ${sizeLabel(gz)} · thank you, it goes into the team-memory experiment`);
-  if (sync) {
-    const setup = readFileSync(join(dir, "setup.json"), "utf8");
-    writeSyncState({
-      bundleId: sent.bundleId,
-      secret: sent.secret,
-      since: Date.now(),
-      days: m.days,
-      url: cloud.url,
-      excluded: m.dropped,
-      dirs: m.dirs ?? [],
-      sessions: Object.fromEntries(m.items.filter((it) => it.kind === "session").map((it) => [it.id, it.mtime])),
-      setupHash: createHash("sha256").update(setup).digest("hex"),
-      lastRunAt: Date.now(),
-    });
-    console.error(`· and from now on: each Claude Code session you start, in any folder, sends what changed since, kept in ${homePath(syncDir())}`);
-    console.error(hookLine(installShareSyncHook(homedir())));
-    console.error(`· stop any time: ${cmd("graft share-session")} --stop`);
-  }
-  console.error(`· take it all back any time: ${cmd("graft share-session")} --delete ${deleteCode(sent)}`);
-  console.error(`· the code is also kept in ${homePath(join(dir, "sent.json"))}`);
-  return true;
-}
-
-/** What happened to the hook in `~/.claude/settings.json`, in one line. */
-function hookLine(r: HookResult): string {
-  const where = homePath(settingsPath(homedir()));
-  if (r === "added") return `· added one hook to ${where} so this runs in every folder, in the terminal and in Claude Desktop; --stop takes it out`;
-  if (r === "already") return `· its hook is in ${where}, so this runs in every folder`;
-  if (r === "removed") return `· took its hook out of ${where}`;
-  if (r === "absent") return "";
-  return `✗ couldn't add its hook to ${where}${r === "unparseable" ? " (the file isn't valid JSON)" : ""}, so this runs only in repos where trail is set up`;
-}
-
-/** Where a running sync stands, and its hook put back if something took it out. */
-function syncStatusLines(s: SyncState): string[] {
-  const n = Object.keys(s.sessions).length;
-  const at = (ms: number) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  const last = s.lastRun;
-  const lastLine = !last
-    ? "· no background run yet: the next Claude Code session you start sends what changed"
-    : last.error
-      ? `✗ the last run, ${at(last.at)}, stopped: ${last.error}. The next session you start tries again`
-      : `· last run ${at(last.at)}: ${last.sent ? `sent ${last.sent}` : "nothing new to send"}`;
-  const put = hasShareSyncHook(homedir()) ? "already" : installShareSyncHook(homedir());
-  const hook = put === "added" ? `· put its hook back in ${homePath(settingsPath(homedir()))}, so this runs in every folder again` : hookLine(put);
-  return [
-    `Sending to the Trail team since ${at(s.since)}: ${n} session${n === 1 ? "" : "s"} so far.`,
-    lastLine,
-    hook,
-    `· what went is kept in ${homePath(syncDir())}`,
-    `· stop: ${cmd("graft share-session")} --stop · take it all back: ${cmd("graft share-session")} --delete ${deleteCode(s)}`,
-  ];
-}
-
-/** `--stop`: nothing more is sent; what went stays until it's deleted. */
-function stopSync(checkout: string): void {
-  const s = readSyncState();
-  if (!s || s.stoppedAt) {
-    console.error("· nothing to stop: you aren't sending sessions");
-    return;
-  }
-  writeSyncState({ ...s, stoppedAt: Date.now() });
-  console.error("✓ stopped: nothing more is sent");
-  const hook = hookLine(removeShareSyncHook(homedir()));
-  if (hook) console.error(hook);
-  console.error(`· what already went stays with the Trail team until you take it back: ${cmd("graft share-session")} --delete ${deleteCode(s)}`);
-}
-
-/** `--delete <code>`: Trail deletes everything sent under it. */
-async function deleteShared(cloud: Cloud, code: string, checkout: string): Promise<void> {
-  const p = parseDeleteCode(code);
-  if (!p) {
-    console.error("✗ that isn't a delete code: it's the <id>.<secret> share-session printed when it sent");
-    process.exitCode = 1;
-    return;
-  }
-  const r = await deleteSharedBundle(cloud, p.bundleId, p.secret);
-  if (isError(r)) {
-    console.error(`✗ couldn't delete it · ${r.error}`);
-    process.exitCode = 1;
-    return;
-  }
-  const root = join(trailHome(), "share");
-  try {
-    for (const name of readdirSync(root)) {
-      const s = readSent(join(root, name));
-      if (s?.bundleId === p.bundleId) writeSent(join(root, name), { ...s, deletedAt: Date.now() });
-    }
-  } catch {
-    // no copies on this laptop
-  }
-  const on = readSyncState();
-  if (on?.bundleId === p.bundleId && !on.stoppedAt) {
-    writeSyncState({ ...on, stoppedAt: Date.now() });
-    removeShareSyncHook(homedir());
-  }
-  console.error(`✓ deleted ${r.deleted} item${r.deleted === 1 ? "" : "s"} from the Trail team`);
-}
-
-/** The repo at `repo`, as the workspace names it. */
+/** The repo at `repo`: its key, display name and checkout. */
 function workspaceRepo(repo: string): { key: string; name: string; checkout: string; git: boolean } {
   const place = repoPlace(repo);
   return { key: place.key, name: repoName(place.key, place.checkout), checkout: place.checkout, git: place.git };
-}
-
-function workspaceCommand(name = "workspace"): Command {
-  const ws = new Command(name)
-    .description("Your Trail workspaces: their repos, the team page and the invite link")
-    .argument("[dir]", "repository root", ".")
-    .option("--json", "output as JSON")
-    .action(async (dir: string, opts: { json?: boolean }) => {
-      const repo = resolve(dir);
-      const all = readClouds();
-      if (!all.length) {
-        console.log("· not connected to a workspace");
-        console.log(`· Claude offers a link once this repo has learnings, or run ${cmd("graft login")}`);
-        return;
-      }
-      const here = workspaceRepo(repo);
-      const seen: Array<{ cloud: Cloud; me: Me }> = [];
-      for (const cloud of all) {
-        const me = await fetchMe(cloud);
-        if (isError(me)) {
-          console.error(`✗ ${all.length > 1 ? `${cloud.workspace.name}: ` : ""}${me.error}`);
-          process.exitCode = 1;
-          continue;
-        }
-        // What the workspace has now, for every command that reads cloud.json.
-        const fresh = { ...cloud, workspace: me.workspace, repos: me.repos.map((r) => r.key) };
-        writeCloud(fresh);
-        seen.push({ cloud: fresh, me });
-      }
-      if (!seen.length) return;
-      // The workspace this repo goes to, else the newest; every one when there are several.
-      const mine = here.git ? cloudIn(seen.map((x) => x.cloud), here.key) : null;
-      if (opts.json) {
-        const pick = seen.find((x) => mine && sameWorkspace(x.cloud, mine)) ?? seen[0];
-        console.log(JSON.stringify(seen.length > 1 ? { ...pick.me, workspaces: seen.map((x) => x.me.workspace) } : pick.me, null, 2));
-        return;
-      }
-      let width = here.name.length + 3;
-      seen.forEach(({ cloud, me }, i) => {
-        if (i > 0) console.log("");
-        console.log(`${me.workspace.name}${seen.length > 1 ? ` (${me.workspace.slug})` : ""} · ${me.workspace.url}`);
-        console.log(`invite  ${me.workspace.invite_url}`);
-        console.log("");
-        width = Math.max(...me.repos.map((r) => r.name.length), here.name.length) + 3;
-        for (const r of me.repos) {
-          const by = r.added_by ? ` · added by ${r.added_by}` : "";
-          // A repo in two workspaces goes to one from this machine: the newest link.
-          const elsewhere = seen.length > 1 && cloudIn(seen.map((x) => x.cloud), r.key) !== cloud ? " · goes to another workspace from here" : "";
-          console.log(`  ✓ ${r.name.padEnd(width)}${r.learnings} learning${r.learnings === 1 ? "" : "s"}${by}${elsewhere}`);
-        }
-      });
-      if (here.git && !mine) {
-        const where = seen.length > 1 ? "in any of your workspaces" : "in the workspace";
-        console.log(`  · ${here.name.padEnd(width)}not ${where} · ${cmd("graft workspace add")}${seen.length > 1 ? " --to <slug>" : ""} shares its learnings`);
-      } else if (here.git) printLines(leftOutLines(here.checkout));
-    });
-  ws.command("add")
-    .description("Add this repo to a workspace and share its learnings")
-    .argument("[dir]", "repository root", ".")
-    .option("--to <slug>", "the workspace, when this machine is in more than one")
-    .action(async (dir: string, opts: { to?: string }) => {
-      const repo = resolve(dir);
-      const all = readClouds();
-      if (!all.length) {
-        console.error(`✗ not connected to a workspace · run ${cmd("graft login")}`);
-        process.exitCode = 1;
-        return;
-      }
-      const here = workspaceRepo(repo);
-      if (!here.git) {
-        console.error("✗ not a git repository");
-        process.exitCode = 1;
-        return;
-      }
-      const cloud = opts.to !== undefined ? all.find((c) => c.workspace.slug === opts.to) : all.length === 1 ? all[0] : undefined;
-      if (!cloud) {
-        if (opts.to !== undefined) console.error(`✗ not connected to a workspace "${opts.to}" · ${cmd("graft workspace")} lists them`);
-        else console.error(`✗ this machine is in ${all.length} workspaces · pick one: ${cmd("graft workspace add")} --to <${all.map((c) => c.workspace.slug).join("|")}>`);
-        process.exitCode = 1;
-        return;
-      }
-      // One workspace per repo on this machine: moving it is a logout of the other first.
-      const now = cloudIn(all, here.key);
-      if (now && !sameWorkspace(now, cloud)) {
-        console.error(`✗ ${here.name} already goes to workspace ${now.workspace.name} · ${cmd("graft logout")} --workspace ${now.workspace.slug} first to send it to ${cloud.workspace.name}`);
-        process.exitCode = 1;
-        return;
-      }
-      const added = await addRepo(cloud, { key: here.key, name: here.name });
-      if (isError(added)) {
-        console.error(`✗ ${added.error}`);
-        process.exitCode = 1;
-        return;
-      }
-      const next: Cloud = { ...cloud, repos: added.repos.map((r) => r.key) };
-      writeCloud(next);
-      rememberRepo(repo);
-      const res = await syncRepo(here.checkout, next);
-      if (isError(res)) {
-        console.error(`✓ added ${here.name} to ${cloud.workspace.name} · its learnings go up in the background (${res.error})`);
-        return;
-      }
-      console.error(`✓ added ${here.name} to ${cloud.workspace.name} · shared ${res.learnings} learning${res.learnings === 1 ? "" : "s"}`);
-      for (const l of leftOutLines(here.checkout)) console.error(l);
-      console.error(`· ${cloud.workspace.url}`);
-    });
-  return ws;
-}
-
-/**
- * One line per learning of this repo's that the workspace doesn't get because
- * it looks like it holds a secret: named, with what was seen, never the
- * secret. Nothing when there are none or git can't read the repo.
- */
-function leftOutLines(checkout: string): string[] {
-  const out = workspaceLearnings(checkout)?.leftOut ?? [];
-  return out.map((l) => `  · left out: ${flatLine(l.name, 200)}${l.ref ? ` (on ${flatLine(l.ref, 120)})` : ""}: looks like it holds a secret (${l.why}). Take the secret out and commit, and it goes up with the next sync`);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2741,49 +1699,9 @@ function teamCommand(name = "team"): Command {
     .argument("[dir]", "repository root", ".")
     .option("--days <n>", "how far back to look", "7")
     .option("--json", "output as JSON")
-    .action(async (dir: string, opts: { days: string; json?: boolean }) => {
-      const repo = resolve(dir);
+    .action((dir: string, opts: { days: string; json?: boolean }) => {
       const days = Math.max(1, Math.min(90, Number(opts.days) || 7));
-      const here = workspaceRepo(repo);
-      // The workspace this repo goes to, else the newest one this machine is in.
-      const cloud = (here.git ? cloudForRepo(here.key) : null) ?? readCloud();
-      if (!cloud) {
-        localTeam(repo, days, opts.json === true);
-        return;
-      }
-      maybeSyncInBackground(repo);
-      const t = await fetchTeam(cloud, { repo: cloud.repos.includes(here.key) ? here.key : undefined, days });
-      if (isError(t)) {
-        console.error(`✗ ${t.error}`);
-        process.exitCode = 1;
-        return;
-      }
-      if (opts.json) {
-        console.log(JSON.stringify(t, null, 2));
-        return;
-      }
-      const period = days === 7 ? "this week" : `the last ${days} days`;
-      console.log(`${period} in ${t.repo || t.workspace}`);
-      console.log(
-        `${t.people} ${t.people === 1 ? "person" : "people"} · ${t.sessions} session${t.sessions === 1 ? "" : "s"} · ` +
-          `${t.new_learnings} new learning${t.new_learnings === 1 ? "" : "s"} · reused ${t.reused}×`,
-      );
-      if (t.members.length) {
-        console.log("");
-        const nameW = Math.max(...t.members.map((m) => m.name.length)) + 3;
-        const topicW = Math.min(36, Math.max(...t.members.map((m) => m.topics.join(", ").length)) + 3);
-        for (const m of t.members) {
-          const learnings = m.learnings ? `${m.learnings} learning${m.learnings === 1 ? "" : "s"}` : "";
-          const reused = m.reused ? `  reused ${m.reused}×` : "";
-          console.log(`  ${m.name.padEnd(nameW)}${m.topics.join(", ").padEnd(topicW)}${learnings.padEnd(12)}${reused}`.trimEnd());
-        }
-      }
-      const overlaps = [...t.overlaps.map((o) => o.text), ...branchOverlapTexts(repo)];
-      if (overlaps.length) {
-        console.log("\noverlap");
-        for (const o of overlaps) for (const [i, l] of wrap(o, 66, "    ").entries()) console.log(i === 0 ? `  ● ${l}` : l);
-      }
-      if (t.url) console.log(`\n  team page: ${t.url}`);
+      localTeam(resolve(dir), days, opts.json === true);
     });
 }
 
@@ -2809,9 +1727,9 @@ function branchOverlapTexts(repo: string, now = Date.now()): string[] {
 }
 
 /**
- * `trail team` before this machine is connected: what this clone can see on
+ * `trail team`: what this clone can see on
  * its own. Who wrote which learnings lately, and where teammates' pushed
- * branches overlap. Reuse and the team page need the workspace.
+ * branches overlap.
  */
 function localTeam(repo: string, days: number, json: boolean): void {
   maybeRefreshBranches(repo);
@@ -2839,8 +1757,6 @@ function localTeam(repo: string, days: number, json: boolean): void {
     console.log("\noverlap");
     for (const o of overlaps) for (const [i, l] of wrap(o, 66, "    ").entries()) console.log(i === 0 ? `  ● ${l}` : l);
   }
-  console.log("\n· reuse and the team page, across your repos, are in a Trail workspace");
-  printLines(cloudLines(repo, { command: "check" }));
 }
 
 function teamCheckCommand(name = "check"): Command {
@@ -2893,28 +1809,13 @@ async function runTeamCheck(dir: string, opts: { base?: string; json?: boolean }
   const notes = withBaseLearnings(listNotes(repo), atBase);
   const r = checkLocally({ diff: withoutTrailFiles(d.diff), files, notes, skills: listSkills(repo), asker: me, committed: committedAtBase(repo, d.from) });
   r.findings.unshift(...edits);
-  // Only learnings the workspace gets: a personal one's file name carries its title.
-  const personal = new Set(notes.filter((n) => n.scope === "personal").map((n) => n.path));
-  const sources = r.findings.map((f) => f.source).filter((s) => s.path && !personal.has(s.path));
-  recordActivity({
-    repo: repoPlace(repo).key,
-    kind: "check",
-    asker: me,
-    session: sessionKey(repo) ?? `${me}-${new Date().toISOString().slice(0, 10)}`,
-    file_count: files.length,
-    shown_paths: [...new Set(sources.map((s) => learningFileName(s.path!)))],
-    shown_authors: [...new Set(sources.map((s) => s.author ?? ""))],
-    at: new Date().toISOString(),
-  });
   const overlaps = overlapsWith(repo, files, me).slice(0, 3);
   if (opts.json) {
     console.log(JSON.stringify({ ...r, overlaps }, null, 2));
   } else {
     printCheck(r);
     if (overlaps.length) console.log(`\n${overlaps.map((o) => formatOverlap(o)).join("\n")}`);
-    printLines(cloudLines(repo, { command: "check" }));
   }
-  maybeSyncInBackground(repo);
   if (r.findings.some((f) => f.verdict === "conflict")) process.exitCode = 1;
 }
 
@@ -2970,7 +1871,7 @@ function shortCount(n: number): string {
 /**
  * `trail status`: what was `graft stats`, on one
  * screen. The code map and whether it matches the code, the learnings for
- * this repo, the workspace, and what the agents saved this week.
+ * this repo, and what the agents saved this week.
  */
 function statusCommand(name = "status"): Command {
   return new Command(name)
@@ -2988,10 +1889,6 @@ function statusCommand(name = "status"): Command {
       const inRepo = all.filter((n) => n.scope === "repo" && !n.ref).length;
       const onBranches = all.filter((n) => n.ref).length;
       const personal = all.filter((n) => n.scope === "personal").length;
-      const clouds = readClouds();
-      // The workspace this repo goes to, else the newest one this machine is in.
-      const cloud = cloudIn(clouds, repoPlace(repo).key) ?? clouds[0] ?? null;
-      const shared = cloud ? inWorkspace(repo, cloud) : false;
       const saved = savedThisWeek(repo);
 
       if (opts.json) {
@@ -3000,7 +1897,6 @@ function statusCommand(name = "status"): Command {
             {
               codeMap: graph ? { nodes: graph.meta.nodeCount, inSync: fresh } : null,
               learnings: kept ? { repo: inRepo, branches: onBranches, personal } : null,
-              workspace: cloud ? { name: cloud.workspace.name, url: cloud.workspace.url, repos: cloud.repos.length, thisRepo: shared } : null,
               week: { savedTokens: saved },
             },
             null,
@@ -3020,15 +1916,6 @@ function statusCommand(name = "status"): Command {
         if (personal) parts.push(`${personal} just for you, on this machine`);
         row("learnings", parts.join(" · "));
       }
-      if (!cloud) {
-        if (cloudEnabled()) row("workspace", `not signed in · run ${cmd("graft login")} to share learnings with your team`);
-      } else if (cloud.via === "connect") {
-        row("workspace", `${cloud.workspace.name} · gets a summary of the repos you run ${cmd("graft init")} --connect in · ${cloud.workspace.url}`);
-      } else
-        row(
-          "workspace",
-          `${cloud.workspace.name} · ${cloud.repos.length} repo${cloud.repos.length === 1 ? "" : "s"}${shared ? ", this one included" : `, not this one (${cmd("graft workspace add")})`} · ${cloud.workspace.url}${clouds.length > 1 ? ` · ${clouds.length - 1} more workspace${clouds.length === 2 ? "" : "s"} (${cmd("graft workspace")})` : ""}`,
-        );
       row("this week", saved > 0 ? `~${shortCount(saved)} tokens saved` : "nothing saved yet");
       // Phase 2 (4.17, D137): Codex's trust of Trail's hooks, and why it keeps nothing new there yet.
       for (const l of codexStatusLines()) row("codex", l);
@@ -3037,15 +1924,10 @@ function statusCommand(name = "status"): Command {
 
 if (TRAIL) {
   for (const c of [teamCheckCommand(), teamCommand()]) program.addCommand(c.helpGroup(GROUP.memory));
-  // Signing in is how every coding agent here gets the team's workspace: always listed.
-  program.addCommand(loginCommand().helpGroup(GROUP.cloud));
-  for (const c of [workspaceCommand(), logoutCommand()]) program.addCommand(c.helpGroup(GROUP.cloud), { hidden: !cloudEnabled() });
-  // The Trail team's own: never listed, and anyone else is told so in one line.
-  program.addCommand(shareSessionCommand(), { hidden: true });
   program.addCommand(statusCommand().helpGroup(GROUP.setup));
 
   // Help lists the groups in this order, and the commands within each.
-  const order = ["ask", "grep", "skeleton", "callers", "map", "note", "check", "team", "skills", "init", "build", "status", "upgrade", "uninstall", "workspace", "login", "logout", "blast"];
+  const order = ["ask", "grep", "skeleton", "callers", "map", "note", "check", "team", "skills", "init", "build", "status", "upgrade", "uninstall", "blast"];
   const rank = (c: Command) => {
     const i = order.indexOf(c.name());
     return i === -1 ? order.length : i;
@@ -3068,9 +1950,6 @@ if (TRAIL) {
     uninstall: "remove everything trail or graft wrote to this repo",
     check: "check your diff against this repo's learnings and yours",
     team: "what the team learned this week, and where work overlaps",
-    workspace: "your workspace's repos, team page and invite link",
-    login: "sign this laptop in to your Trail workspace, in the browser",
-    logout: "disconnect this machine from its workspace",
     blast: "what depends on the lines this diff touched",
   };
   for (const c of program.commands) if (summaries[c.name()]) c.summary(summaries[c.name()]!);
@@ -3079,7 +1958,5 @@ if (TRAIL) {
 
 program.parseAsync(process.argv).catch(async (err) => {
   console.error(err instanceof Error ? err.message : err);
-  // An `init --pair` that crashed part way: its page shows that it stopped instead of reading on.
-  await livePair?.fail("crashed");
   process.exit(1);
 });

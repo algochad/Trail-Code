@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { branchDiff } from "../src/cloud/diff.js";
+import { branchDiff } from "../src/check/branch-diff.js";
 import { tmpRepo } from "./helpers.js";
 
 function git(d: string, args: string[]) {

@@ -2,8 +2,7 @@
  * Trail at the moments a session needs it, without waiting for the agent to
  * run a trail command: a file's learnings before the edit, `trail check`
  * before a commit, push or PR, the save signs for a conflict shipped anyway and
- * for a deploy step fixed, and the workspace link when a hook just put a
- * teammate's learning in front of the agent.
+ * for a deploy step fixed.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +17,6 @@ import { SHIP_CHECK_STOPS, shipCheck, shipReason } from '../src/claude/pre-bash-
 import { preBashContext } from '../src/claude/pre-bash.js';
 import { SHIP_COMMAND } from '../src/claude/pre-bash.js';
 import type { ShipConflict as CheckFinding } from '../src/claude/pre-bash-check.js';
-import { hookNotice, linkedNews } from '../src/cloud/nudge.js';
 import { writeNote, type Note } from '../src/notes/notes.js';
 import { tmpRepo } from './helpers.js';
 
@@ -134,21 +132,4 @@ test('a deploy or CI step that failed, then passed after an edit, is a fix', () 
   const kube = jsonl(prompt('x'), bash('kubectl apply -f deploy/app.yml', 'error: unable', true), edit('deploy/app.yml'), bash('kubectl apply -f deploy/app.yml'));
   assert.deepEqual(kinds(kube), ['fixed']);
   assert.deepEqual(kinds(jsonl(prompt('x'), bash('docker build .', 'ERROR', true), edit('Dockerfile'), bash('docker build .'))), ['fixed']);
-});
-
-test('the workspace link reaches the person when a hook used trail: once a session, with why it comes now', () => {
-  process.env.TRAIL_HOME = mkdtempSync(join(tmpdir(), 'scenario-trail-home-'));
-  process.env.TRAIL_CLOUD = '1';
-  const dir = tmpRepo('hook-link');
-  const git = (args: string[]) => spawnSync('git', ['-c', 'commit.gpgsign=false', ...args], { cwd: dir });
-  git(['init', '-q', '-b', 'main']);
-  git(['remote', 'add', 'origin', 'https://github.com/acme/hooks.git']);
-  writeNote(dir, { title: 'Retries trip the rate limit', body: '## Decided\nThree retries.', author: 'Priya', date: '2026-10-07', touches: [] });
-  const noWait = () => {};
-  const shown = hookNotice(dir, "Claude just got your team's learnings for this", { session: 'h1', startWait: noWait });
-  assert.match(shown ?? '', /^trail · Claude just got your team's learnings for this · Share your learnings with your team: sign in to Trail at http:\/\/trail\.test\/connect\?state=/);
-  assert.equal(hookNotice(dir, 'again', { session: 'h1', startWait: noWait }), null, 'once a session');
-  assert.match(hookNotice(dir, 'next', { session: 'h2', startWait: noWait }) ?? '', /^trail · next · /);
-  assert.equal(linkedNews(), null, 'no news before connecting');
-  delete process.env.TRAIL_CLOUD;
 });

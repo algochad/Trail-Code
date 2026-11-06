@@ -160,21 +160,19 @@ function builtRepo(): string {
   return d;
 }
 
-test("trail --help groups the commands, lists login always and the other workspace ones once signing in is on", () => {
+test("trail --help groups the commands and lists no workspace or login command", () => {
   const home = scratchHome();
   const r = run("trail", ["--help"], home);
   assert.equal(r.status, 0);
   for (const heading of ["Find code", "Learnings:", "Setup:", "CI:"]) assert.ok(r.out.includes(heading), heading);
   assert.doesNotMatch(r.out, /\bmemory\b/i, "learnings, never memory");
   for (const c of ["note", "check", "team", "skills", "status"]) assert.match(r.out, new RegExp(`^  ${c} `, "m"), c);
-  // Still run, just not listed: the brain's commands, skills' undo (also under trail skills), and the workspace's own.
-  for (const c of ["viz", "mcp", "stats", "watch", "connect", "trail", "push", "pull", "learn", "forget", "workspace", "logout"])
+  // Still run, just not listed: skills' undo (also under trail skills).
+  for (const c of ["viz", "mcp", "stats", "watch", "connect", "trail", "push", "pull", "learn", "forget"])
     assert.doesNotMatch(r.out, new RegExp(`^  ${c} `, "m"), c);
-  // Signing in is how every agent here gets the team's workspace: always listed.
-  assert.match(r.out, /^  login /m);
-  const on = run("trail", ["--help"], home, process.cwd(), { TRAIL_CLOUD: "1" });
-  assert.ok(on.out.includes("Workspace"));
-  for (const c of ["workspace", "login", "logout"]) assert.match(on.out, new RegExp(`^  ${c} `, "m"), c);
+  // The workspace is gone from this build: no command for it, listed or not.
+  for (const c of ["workspace", "login", "logout", "share-session", "telemetry"]) assert.doesNotMatch(r.out, new RegExp(`^  ${c} `, "m"), c);
+  assert.ok(!r.out.includes("Workspace"));
 });
 
 test("graft --help keeps its old flat list, including check, without the trail group", () => {
@@ -212,7 +210,7 @@ test("trail check is the team check, not the freshness check", () => {
   assert.match(r.err, /not a git repository/);
 });
 
-test("trail status puts the code map on one screen, and the workspace only once signing in is on", () => {
+test("trail status puts the code map on one screen, with no workspace row", () => {
   const home = scratchHome();
   const d = builtRepo();
   run("trail", ["build", d], home);
@@ -220,10 +218,8 @@ test("trail status puts the code map on one screen, and the workspace only once 
   assert.equal(r.status, 0, r.err);
   assert.match(r.out, /^code map {4}✓ \d+ nodes · in sync with the code$/m);
   assert.doesNotMatch(r.out, /^workspace/m);
-  const on = run("trail", ["status", d], home, process.cwd(), { TRAIL_CLOUD: "1" });
-  assert.match(on.out, /^workspace {3}not signed in · run trail login to share learnings with your team$/m);
   const json = JSON.parse(run("trail", ["status", d, "--json"], home).out);
-  assert.equal(json.workspace, null);
+  assert.equal(json.workspace, undefined);
 });
 
 test("trail stats still works under trail", () => {

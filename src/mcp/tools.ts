@@ -26,7 +26,6 @@ import {
   readWorkspace,
 } from '../graph/workspace.js';
 import type { NodeV1 } from '../graph/types.js';
-import { recordLookup } from '../cloud/lookup-activity.js';
 import { canonicalToolName } from './tool-names.js';
 import { cmd } from '../brand.js';
 
@@ -261,10 +260,7 @@ async function callSingleTool(
         const engine = new Graft({ contextDir: dirOverride });
         const inArg = typeof args.in === 'string' && args.in ? args.in : undefined;
         const r = engine.ask(root, query, { limit, source: true, full: args.full === true, in: inArg });
-        // Same event the CLI's `ask` reports: the learnings shown and the tokens saved.
-        // One render serves both the answer and the saving the event reports.
-        const { text, savedTokens } = formatAskWithSaved(r);
-        recordLookup(r, root, undefined, savedTokens);
+        const { text } = formatAskWithSaved(r);
         return { text, isError: false };
       }
       case 'graft_file_api': {

@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { changedFiles } from "../src/blast/diff.js";
-import { branchDiff } from "../src/cloud/diff.js";
+import { branchDiff } from "../src/check/branch-diff.js";
 import { parseTrailDiff } from "../src/check/local-check.js";
 import { tmpRepo } from "./helpers.js";
 
