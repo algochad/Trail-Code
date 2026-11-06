@@ -5,11 +5,12 @@
  */
 import { execFileSync } from "node:child_process";
 import { userInfo } from "node:os";
+import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
 
 /** git's stdout, trimmed unless `raw` (porcelain status starts lines with a meaningful space). */
 function git(repo: string, args: string[], raw = false): string | null {
   try {
-    const out = execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const out = execFileSync("git", plainGit(args), { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
     return raw ? out : out.trim();
   } catch {
     return null;

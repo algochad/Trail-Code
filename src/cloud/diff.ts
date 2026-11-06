@@ -3,10 +3,11 @@
  * pull request, committed or not, measured from where it left its base.
  */
 import { execFileSync } from "node:child_process";
+import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
 
 function git(repo: string, args: string[]): string | null {
   try {
-    return execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
+    return execFileSync("git", plainGit(args), { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
   } catch {
     return null;
   }

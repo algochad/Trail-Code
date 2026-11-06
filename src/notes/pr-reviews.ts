@@ -32,6 +32,7 @@ import { noteAuthor } from "./git-facts.js";
 import { ensureRepoHome } from "./home.js";
 import { listNotes, shortDate, writeNote, type Note } from "./notes.js";
 import { alreadySaid, codeAnchors, knownText } from "./team-check.js";
+import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
 
 /** One merged or closed PR with what was said on it, oldest comment first. */
 export interface ReviewedPR {
@@ -336,7 +337,7 @@ export function repoDocs(repo: string): { id: string; text: string }[] {
 
 /** The repo's revert commits, newest first: what was tried and backed out. */
 export function revertCommits(repo: string): string {
-  const r = spawnSync("git", ["-C", repo, "log", "-n", "400", "--grep=^Revert", "--format=%h %ad %s%n%b%n---", "--date=short"], { encoding: "utf8", timeout: 15_000, maxBuffer: 16 * 1024 * 1024 });
+  const r = spawnSync("git", [...GIT_PLAIN_CONFIG, "-C", repo, "log", "-n", "400", "--grep=^Revert", "--format=%h %ad %s%n%b%n---", "--date=short"], { encoding: "utf8", timeout: 15_000, maxBuffer: 16 * 1024 * 1024 });
   return r.status === 0 ? scrub(r.stdout.trim()).slice(0, DOC_CHARS) : "";
 }
 
@@ -491,7 +492,7 @@ function onItsFiles(touches: string[], f: ReviewFinding): string[] {
 /** How many commits touched each file in the last 60 days: what the team is working on now. */
 function recentEdits(repo: string): Map<string, number> {
   const counts = new Map<string, number>();
-  const r = spawnSync("git", ["-C", repo, "log", "--since=60.days", "--name-only", "--format="], { encoding: "utf8", timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
+  const r = spawnSync("git", [...GIT_PLAIN_CONFIG, "-C", repo, "log", "--since=60.days", "--name-only", "--format="], { encoding: "utf8", timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0) return counts;
   for (const f of r.stdout.split("\n")) if (f) counts.set(f, (counts.get(f) ?? 0) + 1);
   return counts;

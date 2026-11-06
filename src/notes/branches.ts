@@ -23,6 +23,7 @@ import { graftCliPath } from "../claude/paths.js";
 import { cacheDir, readJson, writeJsonAtomic } from "../util/state.js";
 import { flatLine } from "./flatten.js";
 import { LEARNINGS_DIR } from "./repo-trail.js";
+import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
 
 /** How old the cache may get before the next command refreshes it in the
  * background: about what editors that fetch on their own wait between fetches. */
@@ -107,7 +108,7 @@ export function readBranchCache(repo: string): BranchCache | null {
 function git(repo: string, args: string[], timeout = 15_000): string | null {
   try {
     // Never a credential prompt: this runs detached, where nobody could answer it.
-    return execFileSync("git", args, {
+    return execFileSync("git", plainGit(args), {
       cwd: repo,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],

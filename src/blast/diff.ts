@@ -9,6 +9,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
 
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed";
 
@@ -66,7 +67,7 @@ const MAX_FILE_LINES = 200;
 
 /** Run git in `root`, or return null when git fails (not a repo, unknown ref). */
 function git(root: string, args: string[]): string | null {
-  const res = spawnSync("git", ["-c", "core.quotePath=false", ...args], {
+  const res = spawnSync("git", plainGit(args), {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],

@@ -25,6 +25,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import type { BlastReport } from "./blast.js";
+import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
 
 /** One person's claim on one area. */
 export interface Owner {
@@ -113,7 +114,7 @@ function isBot(name: string, email: string): boolean {
 
 /** Run git in `root`, or null when git fails — not a repo, no git, no history. */
 function git(root: string, args: string[]): string | null {
-  const res = spawnSync("git", ["-c", "core.quotePath=false", ...args], {
+  const res = spawnSync("git", plainGit(args), {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],

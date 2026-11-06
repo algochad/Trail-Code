@@ -17,6 +17,7 @@ import { extractGeneric } from "../graph/generic.js";
 import type { NodeV1 } from "../graph/types.js";
 import { readBranchCache, safeRef, type BranchCache } from "./branches.js";
 import { flatLine } from "./flatten.js";
+import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
 
 export interface Lines {
   start: number;
@@ -52,7 +53,7 @@ export interface FunctionOverlap {
 
 function git(repo: string, args: string[]): string | null {
   try {
-    return execFileSync("git", args, {
+    return execFileSync("git", plainGit(args), {
       cwd: repo,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
