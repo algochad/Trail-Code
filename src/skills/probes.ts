@@ -22,13 +22,13 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { accessSync, constants, statSync, type Stats } from 'node:fs';
-import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { ParsedSkill } from './types.js';
 import { flatLine } from '../notes/flatten.js';
 import { readJsonSafe, trailPath, writePrivate } from '../util/private-fs.js';
 import { onlyTrailChanges } from './probe-clean.js';
 import { pathDirs, programFiles } from '../trace/guard-fast.js';
+import { userHome } from "../util/home.js";
 
 export interface ProbeResult { probe: string; ok: boolean; why?: string; fix?: string }
 
@@ -121,7 +121,7 @@ function statOf(path: string): Stats | null {
 
 /** A path token with $HOME and ~ expanded; relative to the checkout. null when it can't be placed. */
 function placed(token: string, checkout: string, env: NodeJS.ProcessEnv): string | null {
-  const home = env.HOME || homedir();
+  const home = userHome(env);
   const t = token.replace(/^(?:\$HOME|\$\{HOME\}|~)\//, `${home}/`);
   if (isAbsolute(t)) return t;
   return checkout ? resolve(checkout, t) : null;

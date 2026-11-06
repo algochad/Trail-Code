@@ -23,7 +23,6 @@
  * does not close it (0 rule 13).
  */
 import { realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { EDIT_TOOLS, effectiveFolder, INTERPRETERS } from './run-calls.js';
 import { gitWriteTargets } from './tamper-git.js';
@@ -31,6 +30,8 @@ import { base, OPEN_KW, scan, unquote, words } from './shell-scan.js';
 import { codeWrites, programCode, SHELLS } from './tamper-code.js';
 import { bareCommand, onlyTrail, programOf, simpleCommands } from './shell.js';
 import { agentGuard } from '../skills/risk.js';
+import { userHome } from "../util/home.js";
+import { claudeDir } from "../util/home.js";
 
 export interface TamperCtx {
   trailHome: string;
@@ -71,11 +72,11 @@ function realOf(p: string): string {
 const ZONES = new Map<string, Zones>();
 
 function zonesOf(ctx: TamperCtx): Zones {
-  const home = ctx.home ?? homedir();
+  const home = ctx.home ?? userHome();
   const memo = `${ctx.trailHome}\0${ctx.transcriptPath}\0${home}`;
   let z = ZONES.get(memo);
   if (!z) {
-    const as: Place = { trail: resolve(ctx.trailHome), projects: resolve(home, '.claude', 'projects'), transcript: ctx.transcriptPath ? resolve(ctx.transcriptPath) : null };
+    const as: Place = { trail: resolve(ctx.trailHome), projects: resolve(claudeDir(home), 'projects'), transcript: ctx.transcriptPath ? resolve(ctx.transcriptPath) : null };
     const real: Place = { trail: realOf(as.trail), projects: realOf(as.projects), transcript: as.transcript === null ? null : realOf(as.transcript) };
     z = { as, real, home };
     if (ZONES.size > 32) ZONES.clear();

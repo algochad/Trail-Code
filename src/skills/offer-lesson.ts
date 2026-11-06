@@ -15,7 +15,6 @@
  * Nothing typed is written: the pending offer keeps the pointer, the fix
  * command and the lesson's sha, and its lines are rebuilt by `offerLinesOf`.
  */
-import { homedir } from 'node:os';
 import { useFor } from '../trace/dialect.js';
 import type { GateCtx } from '../trace/skill-session.js';
 import type { PendingOffer, RunCall, SkillSessionState } from '../trace/types.js';
@@ -29,6 +28,7 @@ import { readLessons, lessonRefused, lessonSha, lessonText, correctionPhrase } f
 import { newOfferId, offerBudget } from './offers.js';
 import { typedLineAt } from './offer-lines.js';
 import type { OfferDue, OfferInput } from './offer-moment.js';
+import { userHome } from "../util/home.js";
 
 export { offerLinesOf, correctionLesson, correctionLines, typedLineAt, type OfferLinesIn } from './offer-lines.js';
 
@@ -102,7 +102,7 @@ export function lessonOfferDue(i: OfferInput & { ctx: OfferInput['ctx'] & Pick<G
 
   const inj = st.injected.find((x) => x.injId === credit.injId);
   const params = inj && inj.params && typeof inj.params === 'object' ? inj.params : {};
-  const fix = fixCommand(st, offset, skill.steps.map((s) => s.cmd), params, { checkout: ctx.checkout, home: env.HOME || homedir() });
+  const fix = fixCommand(st, offset, skill.steps.map((s) => s.cmd), params, { checkout: ctx.checkout, home: userHome(env) });
   let text = lessonText(phrase, fix.cmd, params);
   const alone = lessonText(phrase, null, params);
   if (!text || !alone) return { due: false, why: 'phrase' };

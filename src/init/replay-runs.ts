@@ -14,7 +14,6 @@
  */
 import { createHash } from 'node:crypto';
 import { closeSync, readSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { repoPlace, type RepoPlace } from '../notes/home.js';
 import { trailHome } from '../notes/trail-home.js';
@@ -37,6 +36,7 @@ import { tamperedBefore, turnOnly, writeMarkIn } from './replay-tamper.js';
 import { dayOf, eachLine } from './transcript.js';
 import type { SkillSource, TypedRef } from './types.js';
 import { stepLearnings } from '../skills/follow-learnings.js';
+import { userHome } from "../util/home.js";
 
 /** A session's replay stops at this many runs (4.2 cost control). */
 export const MAX_REPLAY_RUNS = 200;
@@ -345,7 +345,7 @@ export function replaySession(path: string, stretch: { from: number; to: number 
     if (r.closed) continue;
     r.closed = true;
     // As the fold does for a run it closes (b2): its repairs, while it still has its calls.
-    noteRepairs(r, { home: homedir(), root: (ctx as FoldContext | null)?.checkout ?? '' });
+    noteRepairs(r, { home: userHome(), root: (ctx as FoldContext | null)?.checkout ?? '' });
     // A run closed by the stretch's end is whole only when the stretch is the rest of the file and was read to it.
     closeRun(r, out.stopped ? chunkAt : stretch.to, st.tampered !== null || turnTainted.has(r.id), !out.stopped && stretch.to >= out.size);
   }
@@ -365,7 +365,7 @@ export function compileInitSkill(entry: ReplaySheet, prior: ReplaySheet | null, 
   now: Date = new Date()): InitCompile {
   const scope = { repoKeys: [...new Set([repoKey, entry.sheet.repoKey])], checkout: entry.root, env };
   const r = compileRun(entry.sheet, {
-    repoRoot: entry.root, home: env.HOME || homedir(), platform: process.platform, prior: prior?.sheet ?? null, moment: 'repeated',
+    repoRoot: entry.root, home: userHome(env), platform: process.platform, prior: prior?.sheet ?? null, moment: 'repeated',
     applies: repoKey, now, readSheet: () => null, taken: (n) => nameTaken(n, scope) !== null,
     learnings: stepLearnings({ repoKeys: [...new Set([repoKey, entry.sheet.repoKey])], checkout: entry.root, env }),
   });

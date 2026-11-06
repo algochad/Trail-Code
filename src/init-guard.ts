@@ -1,13 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { userHome } from "./util/home.js";
 
 /**
  * Why `trail init` won't set up `dir`, or null when it will. Only the home
  * folder is refused: run there, init wired it, mapped every code file under it
  * and said to commit, though nobody shares learnings for a whole home folder.
  */
-export function homeFolderRefusal(dir: string, home: string = homedir()): string | null {
+export function homeFolderRefusal(dir: string, home: string = userHome()): string | null {
   if (resolve(dir) !== resolve(home)) return null;
   return "✗ ~ is your home folder, not a repo.\n  cd into the repo you want to set up, then run trail init again.";
 }

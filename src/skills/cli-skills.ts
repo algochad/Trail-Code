@@ -9,7 +9,6 @@
  * `add` is g5's CLI half (`cliAdd`): this file only prints what it returns,
  * because the save gate's import closure may not load the CLI.
  */
-import { homedir } from 'node:os';
 import { Argument, InvalidArgumentError, type Command } from 'commander';
 import { repoPlace } from '../notes/home.js';
 import { flatLine } from '../notes/flatten.js';
@@ -28,6 +27,7 @@ import { forgetLearning, initDraftCommand, lessonCommand, type CliOut } from './
 import { noteAgentForget, type Dropped } from './forget-notice.js';
 import { draftFoldText, liftRestoreVersion, restoreVersionCommand, updateCommand, versionsLine } from './cli-skills-2.js';
 import { stepLearnings } from './follow-learnings.js';
+import { userHome } from "../util/home.js";
 
 /** Seams for tests; production passes nothing. */
 export interface SkillCliDeps {
@@ -195,7 +195,7 @@ function draft(x: Io, runId: string, print: boolean): void {
   const root = runCheckout(sheet, x.env, place.git && place.key === sheet.repoKey ? place.checkout : '');
   const scope = { repoKeys: [sheet.repoKey], checkout: root, env: x.env };
   const opts = {
-    repoRoot: root, home: x.env.HOME || homedir(), platform: process.platform,
+    repoRoot: root, home: userHome(x.env), platform: process.platform,
     prior: findPriorSheet(sheet, x.env), applies: sheet.repoKey, now: x.now(), readSheet: (id: string) => readRunSheet(id, x.env),
     taken: (n: string) => nameTaken(n, scope) !== null,
     learnings: stepLearnings({ repoKeys: [sheet.repoKey], checkout: root, env: x.env }),

@@ -11,7 +11,7 @@
 import { spawnSync } from "node:child_process";
 import "dotenv/config";
 import { Command } from "commander";
-import { readFileSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Graft } from "./engine.js";
@@ -21,6 +21,7 @@ import { formatCheckReport } from "./context/check.js";
 import { formatGraphCheckReport } from "./graph/check.js";
 import { buildGraphIfMissing, runInit } from "./claude/init.js";
 import { pluginHooks, statuslineWanted } from "./claude/settings-merge.js";
+import { skillTemplate } from "./claude/skill-template.js";
 import { runHostsInit } from "./hosts/init.js";
 import { codexStatusLines, codexTrustLine } from "./hosts/codex-trust.js";
 import { hostIds } from "./hosts/registry.js";
@@ -50,7 +51,6 @@ import { planInit, selectedWrites } from "./hosts/plan.js";
 import { planRetract, runRetract, changed, type Retraction } from "./hosts/retract.js";
 import { compactWrites, formatNonInteractiveHelp, formatPlan, runPicker } from "./cli-picker.js";
 import { buildGraphWithProgress } from "./claude/build-progress.js";
-import { homedir } from "node:os";
 import { formatUpgradeReport, readCurrentVersion, readPackageName, runUpgrade } from "./cli-meta.js";
 import { nativeFallbackNotice } from "./graph/native.js";
 import { patchBuildConfig, type BuildConfig } from "./util/state.js";
@@ -79,6 +79,7 @@ import type { AskResult } from "./ask/ask.js";
 import { setInputRate } from "./context/savings.js";
 import { readStamp, wiredHostIds, wiringOpts, writeStamp } from "./upkeep.js";
 import { shouldMoveToTrail } from "./upkeep-run.js";
+import { userHome } from "./util/home.js";
 
 const program = new Command();
 const currentVersion = readCurrentVersion(import.meta.url);
@@ -277,6 +278,19 @@ program
       }
     }
     process.exitCode = 0;
+  });
+
+// The skill file `trail init` writes to ~/.claude/skills/trail, for a plugin that ships it itself.
+grouped(program.command("skill"), GROUP.setup)
+  .description("The skill file trail init writes for Claude Code")
+  .command("export")
+  .description("write the SKILL.md trail init would write to ~/.claude/skills/trail/ into --out DIR, so a plugin can ship it")
+  .requiredOption("--out <dir>", "the folder to write SKILL.md into")
+  .action((o: { out: string }) => {
+    const dir = resolve(o.out);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), skillTemplate("trail"));
+    console.log(join(dir, "SKILL.md"));
   });
 
 grouped(program.command("hooks"), GROUP.setup)
@@ -1018,6 +1032,8 @@ grouped(program.command("init"), GROUP.setup)
   .option("--no-mcp", "skip MCP server registration for other agents")
   .option("--no-hooks", "write no hooks: not for other agents, and for Claude Code no hook shim or hook entries in .claude/settings.json or ~/.claude (a plugin registers them: trail hooks print)")
   .option("--no-statusline", "skip writing Claude Code statusLine (keep a user-defined one); with --no-hooks, no Claude Code settings file is touched")
+  .option("--no-user-skill", "don't write the skill file in ~/.claude/skills (a plugin ships it: trail skill export)")
+  .option("--plugin", "a Claude Code plugin owns the hooks and the skill: --no-hooks --no-statusline --no-user-skill, nothing written under ~/.claude, and the repo records it in .trail/")
   .option("--dry-run", "print every file init would touch, then exit without writing")
   .option("-y, --yes", "skip the picker and wire every detected agent (the pre-0.8 default)")
   .option("--no-global", "skip writes outside this repo (the ~/.codex/ config + hooks)")
@@ -1027,6 +1043,7 @@ grouped(program.command("init"), GROUP.setup)
   .option("--mine-sessions", "learn from your past Claude Code sessions in this repo (off by default; they are read on this machine, by your own Claude Code)")
   .option("--mine-prs", "learn from the review comments on this repo's last merged PRs, through gh (off by default)")
   .action(async (dir: string, opts: InitOptions) => {
+    if (opts.plugin) Object.assign(opts, { hooks: false, statusline: false, userSkill: false });
     await runInitCommand(dir, opts);
   });
 
@@ -1216,7 +1233,7 @@ export function commitAsk(title: string, about?: string): string {
 }
 
 /** `graft init`'s flags, as commander hands them over. */
-interface InitOptions { build?: boolean; agents?: string[]; allAgents?: boolean; listAgents?: boolean; mcp?: boolean; hooks?: boolean; statusline?: boolean; dryRun?: boolean; yes?: boolean; global?: boolean; verbose?: boolean; plain?: boolean; lookBack?: boolean; mineSessions?: boolean; minePrs?: boolean }
+interface InitOptions { build?: boolean; agents?: string[]; allAgents?: boolean; listAgents?: boolean; mcp?: boolean; hooks?: boolean; statusline?: boolean; dryRun?: boolean; yes?: boolean; global?: boolean; verbose?: boolean; plain?: boolean; lookBack?: boolean; mineSessions?: boolean; minePrs?: boolean; plugin?: boolean; userSkill?: boolean }
 
 /** Repo-relative with forward slashes, for printing. */
 function shown(repo: string, path: string): string {
@@ -1265,7 +1282,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     // win; otherwise prompt on a TTY, and on a pipe write nothing rather than
     // guessing (pre-0.8 this silently wired every agent the machine had ever
     // installed — see --yes to get that back).
-    const home = homedir();
+    const home = userHome();
     const plan = planInit(repo, { home });
     const detectedIds = plan.filter((p) => p.detected).map((p) => p.id);
     const noAgents = (opts as { agents?: unknown }).agents === false;
@@ -1529,7 +1546,7 @@ function wireTarget(
     cliPath: string;
     plan: ReturnType<typeof planInit>;
     wantClaude: boolean;
-    opts: { build?: boolean; mcp?: boolean; hooks?: boolean; global?: boolean; statusline?: boolean };
+    opts: { build?: boolean; mcp?: boolean; hooks?: boolean; global?: boolean; statusline?: boolean; userSkill?: boolean };
     /** Collect warnings and removals instead of printing a line per file, and
      *  leave the graph build to the caller (see buildGraphWithProgress). */
     quiet?: boolean;
@@ -1565,7 +1582,7 @@ function wireTarget(
       // writes under `~/.claude` now (hosts/claude-global.ts), so --no-global has to
       // reach it or the flag would silently mean "no out-of-repo writes, except three".
       const claudeGlobal = opts.global !== false && (!ctx.laptop || ctx.laptop.includes("claude"));
-      const res = runInit(repo, { build: opts.build, cliPath, statusline: wantStatusline, hooks: opts.hooks, global: claudeGlobal, home, brand: brand() });
+      const res = runInit(repo, { build: opts.build, cliPath, statusline: wantStatusline, hooks: opts.hooks, userSkill: opts.userSkill, global: claudeGlobal, home, brand: brand() });
       say(`✓ wrote ${res.settingsPath}`);
       for (const s of res.shims) say(`✓ wrote ${s}`);
       if (res.skill) say(`✓ wrote ${res.skill}`);
@@ -1677,7 +1694,7 @@ grouped(program.command("uninstall"), GROUP.setup)
   .option("--no-global", "leave out-of-repo files alone (~/.codex, ~/.gemini)")
   .action((dir: string, opts: { yes?: boolean; keepCache?: boolean; global?: boolean }) => {
     const repo = resolve(dir);
-    const home = homedir();
+    const home = userHome();
     const common = { home, global: opts.global, cache: opts.keepCache ? false : true };
 
     if (!opts.yes) {

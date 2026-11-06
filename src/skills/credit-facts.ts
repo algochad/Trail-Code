@@ -9,16 +9,16 @@
  * Fidelity never changes the use's outcome or the skill's status (P3), and a
  * throw writes the use line without it.
  */
-import { homedir } from 'node:os';
 import type { RunSheet, SkillInjection } from '../trace/types.js';
 import type { LedgerUseFacts, ParsedSkill } from './types.js';
 import { fidelityCounts, fidelityOf, type FidelityWhere } from './fidelity.js';
 import { runCheckout } from './run-checkout.js';
+import { userHome } from "../util/home.js";
 
 /** The repo, the run's own checkout (D93) and the home, for fidelity and its keys. */
 export function fidelityWhere(sheet: Pick<RunSheet, 'repoKey' | 'checkout'>, env: NodeJS.ProcessEnv = process.env): FidelityWhere {
   const root = runCheckout(sheet, env, '');
-  return { repoKey: sheet.repoKey, ...(root ? { repoRoot: root } : {}), home: env.HOME || homedir() };
+  return { repoKey: sheet.repoKey, ...(root ? { repoRoot: root } : {}), home: userHome(env) };
 }
 
 /** 4.1 step 5: the use line's `fid`, `extraShas` (first 4) and `changedSteps` (first 4). {} when the skill can't be read. */

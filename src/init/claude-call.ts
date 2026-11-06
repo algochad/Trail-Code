@@ -4,9 +4,10 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { flatLine } from "../notes/flatten.js";
+import { userHome } from "../util/home.js";
 
 /** Whether `claude` (Claude Code) is on PATH. */
 function claudeOnPath(): boolean {
@@ -27,7 +28,7 @@ function extensionVersion(name: string): number[] | null {
  * PATH, and without this their past sessions are never read. Null when
  * there's none.
  */
-export function claudeBin(home: string = homedir(), onPath: () => boolean = claudeOnPath): string | null {
+export function claudeBin(home: string = userHome(), onPath: () => boolean = claudeOnPath): string | null {
   if (onPath()) return "claude";
   const exe = process.platform === "win32" ? "claude.exe" : "claude";
   for (const p of [join(home, ".local", "bin", exe), join(home, ".claude", "local", exe)]) if (existsSync(p)) return p;

@@ -19,12 +19,12 @@
  * node:crypto come from `process.getBuiltinModule`, as pre-bash.ts does.
  * Writes are tmp-and-rename (or one O_APPEND write) at 0600 in a 0700 folder.
  */
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type * as Fs from 'node:fs';
 import type * as Crypto from 'node:crypto';
 import { programOf } from './shell.js';
 import type { GatedKind, SkillSessionState } from './types.js';
+import { userHome } from "../util/home.js";
 
 export interface GateGroup {
   kind: GatedKind;
@@ -58,7 +58,7 @@ const crypto = (): typeof Crypto => process.getBuiltinModule('node:crypto') as t
 
 /** The same answer as notes/home.ts trailHome(env); a test holds them equal. */
 export function trailHomeFast(env: NodeJS.ProcessEnv = process.env): string {
-  return env.TRAIL_HOME ? resolve(env.TRAIL_HOME) : join(homedir(), '.trail');
+  return env.TRAIL_HOME ? resolve(env.TRAIL_HOME) : join(userHome(), '.trail');
 }
 
 /** A session id as a file name, as phase 0's state.ts does it (a test holds them equal). */

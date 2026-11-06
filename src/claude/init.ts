@@ -1,6 +1,5 @@
 import { mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync, rmdirSync, existsSync, appendFileSync } from 'node:fs';
 import { join, dirname, resolve, isAbsolute } from 'node:path';
-import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { disableGraftServerIn, installClaudeGlobal, type GlobalWrite } from '../hosts/claude-global.js';
 import { mergeGraftSettings, mergeTrailShared, mergeTrailLocal, statuslineWanted } from './settings-merge.js';
@@ -12,15 +11,17 @@ import { ignoreInTrailDir } from '../notes/repo-trail.js';
 export { ignoreInTrailDir };
 import { hasGraftIndex } from '../graph/root.js';
 import type { PlannedWrite } from '../hosts/plan.js';
-import { repoWiredForTrail, type Brand } from '../brand.js';
+import { PLUGIN_MARKER, repoWiredForTrail, type Brand } from '../brand.js';
+import { userHome } from "../util/home.js";
+import { claudeDir } from "../util/home.js";
 
 /** trail's committed hook, inside `.trail/` where a `.claude/*` ignore rule can't drop it. */
 export const TRAIL_HOOK = join('.trail', 'hook.cjs');
 /** The status line's shim. Also in `.trail/`, but ignored there: only people with trail draw it. */
 export const TRAIL_STATUSLINE = join('.trail', 'statusline.cjs');
 /** Where trail's skill goes: the user's own `~/.claude`, never the repo. */
-export function trailSkillPath(home: string = homedir()): string {
-  return join(home, '.claude', 'skills', 'trail', 'SKILL.md');
+export function trailSkillPath(home: string = userHome()): string {
+  return join(claudeDir(home), 'skills', 'trail', 'SKILL.md');
 }
 
 /**
@@ -52,7 +53,7 @@ export function wiringName(dir: string, initBrand?: Brand): Brand {
  * `~/.claude/skills/`, and the other hooks in `~/.claude` (hosts/claude-global.ts).
  * No MCP server: the hooks and the `trail` command do what it did.
  */
-export function claudeTargetsFor(dir: string, name: Brand, home: string = homedir()): PlannedWrite[] {
+export function claudeTargetsFor(dir: string, name: Brand, home: string = userHome()): PlannedWrite[] {
   if (name !== 'trail') return legacyClaudeTargets(dir, name);
   const t = (path: string, what: string): PlannedWrite => ({ hostId: 'claude', id: 'claude', path, scope: 'repo', kind: 'claude', what });
   return [
@@ -132,7 +133,7 @@ export interface InitResult {
 
 export function runInit(
   dir: string,
-  opts: { build?: boolean; cliPath?: string; statusline?: boolean; hooks?: boolean; global?: boolean; home?: string; brand?: Brand } = {},
+  opts: { build?: boolean; cliPath?: string; statusline?: boolean; hooks?: boolean; userSkill?: boolean; global?: boolean; home?: string; brand?: Brand } = {},
 ): InitResult {
   if (wiringName(dir, opts.brand) === 'trail') return runTrailInit(dir, opts);
   // Same list `--dry-run` and the picker report, so the two can't drift apart.
@@ -156,7 +157,7 @@ export function runInit(
   // package lives here goes to the trail home instead, for them to find first.
   writeFileSync(sl, statuslineShim()); chmodSync(sl, 0o755);
   writeFileSync(hk, hooksShim()); chmodSync(hk, 0o755);
-  rememberInstall(opts.home ?? homedir());
+  rememberInstall(opts.home ?? userHome());
 
   // Install the graft skill — the piece that redirects the agent to graft/ before it
   // greps source. Overwritten each run (graft owns this file), like the shims above.
@@ -174,7 +175,7 @@ export function runInit(
   // hosts/claude-global.ts for the failure that motivates it. Gated on the same
   // flag `registerMcpConfigs` uses, so `--no-global` still means "nothing outside
   // this repo".
-  const global = opts.global === false ? [] : installClaudeGlobal(opts.home ?? homedir(), 'graft');
+  const global = opts.global === false ? [] : installClaudeGlobal(opts.home ?? userHome(), 'graft');
 
   const built = buildGraphIfMissing(dir, opts);
   return { settingsPath, shims: [sl, hk], skill: skillPath, mcp, global, warnings, built };
@@ -193,12 +194,14 @@ function notPlainJson(file: string, what: string): string {
  */
 function runTrailInit(
   dir: string,
-  opts: { build?: boolean; cliPath?: string; statusline?: boolean; hooks?: boolean; global?: boolean; home?: string },
+  opts: { build?: boolean; cliPath?: string; statusline?: boolean; hooks?: boolean; userSkill?: boolean; global?: boolean; home?: string },
 ): InitResult {
-  const home = opts.home ?? homedir();
+  const home = opts.home ?? userHome();
   const global = opts.global !== false;
-  // `--no-hooks`: a Claude Code plugin registers the hooks (`trail hooks print`), so no hook is written anywhere.
+  // `--no-hooks`: a Claude Code plugin registers the hooks (`trail hooks print`), so no hook is written anywhere,
+  // and the repo says so (`.trail/plugin-managed.json`). `--no-user-skill`: no skill file in the user's `.claude` either.
   const hooks = opts.hooks !== false;
+  const userSkill = opts.userSkill !== false;
   const wantStatusline = statuslineWanted(opts);
   const [settings, hook, local, statusline, skill] = claudeTargetsFor(dir, 'trail', home).map((t) => t.path);
 
@@ -212,6 +215,10 @@ function runTrailInit(
   // the build: a hook or `--no-build` writes the cache there before any build adds the line.
   ignoreInTrailDir(dir, 'cache/');
   rememberInstall(home);
+  if (!hooks) {
+    mkdirSync(join(dir, '.trail'), { recursive: true });
+    writeFileSync(join(dir, '.trail', PLUGIN_MARKER), `${JSON.stringify({ hooks: 'plugin' }, null, 2)}\n`);
+  }
 
   // Either file, when it isn't plain JSON, is the person's and stays as it is
   // (see runInit): rewriting it would drop their own hooks and settings.
@@ -236,7 +243,7 @@ function runTrailInit(
   }
 
   let skillPath = '';
-  if (global) {
+  if (global && userSkill) {
     mkdirSync(dirname(skill), { recursive: true });
     writeFileSync(skill, skillTemplate('trail'));
     skillPath = skill;
@@ -248,7 +255,7 @@ function runTrailInit(
   const globalWrites = global && hooks ? installClaudeGlobal(home, 'trail') : [];
   // A trail repo on a machine with graft's server installed for everything:
   // graft goes off in this folder, so its tools don't show here.
-  if (global) globalWrites.push(disableGraftServerIn(home, resolve(dir)));
+  if (global && hooks) globalWrites.push(disableGraftServerIn(home, resolve(dir)));
 
   const built = buildGraphIfMissing(dir, opts);
   return { settingsPath: settings, shims: [statusline, hook], skill: skillPath, mcp: null, global: globalWrites, warnings, built };

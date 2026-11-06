@@ -16,7 +16,6 @@
  */
 import type { Host } from '../trace/host.js';
 import { createHash } from 'node:crypto';
-import { homedir } from 'node:os';
 import type { CheckedVerdict, FoldResult } from '../trace/runs.js';
 import type { GateCtx } from '../trace/skill-session.js';
 import type { OfferChannel, PendingOffer, RunSheet, RunState, SkillSessionState, TypedAnswer } from '../trace/types.js';
@@ -46,6 +45,7 @@ import type { FoldPlanner } from './offer-update.js';
 import type { Fired, Settled } from './credit.js';
 import { useFor, type DialectUse } from '../trace/dialect.js';
 import { stepLearnings, withFollowLine } from './follow-learnings.js';
+import { userHome } from "../util/home.js";
 
 const SAME_LINE_MS = 5000;
 
@@ -234,7 +234,7 @@ export function compileOffered(sheet: RunSheet, st: SkillSessionState, ctx: Offe
   // D93: the run's own checkout, as both halves of the save gate compile it.
   const root = runCheckout(sheet, env, ctx.repoKey === sheet.repoKey ? ctx.checkout : '');
   return compileRun(sheet, {
-    repoRoot: root, home: env.HOME || homedir(), platform: process.platform,
+    repoRoot: root, home: userHome(env), platform: process.platform,
     prior: findPriorSheet(sheet, env), moment: 'repeated', applies: sheet.repoKey, now: ctx.now, readSheet: read,
     taken: (n) => nameTaken(n, { ...scope, checkout: root || scope.checkout }) !== null,
     learnings: stepLearnings({ repoKeys: [sheet.repoKey], checkout: root, env }),

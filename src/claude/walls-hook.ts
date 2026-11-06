@@ -12,7 +12,7 @@
  */
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { homedir, userInfo } from 'node:os';
+import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import type { RunCall, RunState, SkillSessionState, WallClass } from '../trace/types.js';
 import type { GateCtx } from '../trace/skill-session.js';
@@ -29,6 +29,7 @@ import { localDate } from '../skills/settings.js';
 import type { Sent } from './skills-hook-util.js';
 import type { Host } from '../trace/host.js';
 import { hostFacts } from '../skills/host-facts.js';
+import { userHome } from "../util/home.js";
 
 /** How long after a deny a passing call of the same command counts as the deny avoided (3.5 step 5). */
 export const AVOIDED_MS = 30 * 60 * 1000;
@@ -42,7 +43,7 @@ const MAX_DENIED_LINES = 64;
  */
 export function onPathHere(program: string, env: NodeJS.ProcessEnv): boolean {
   if (!/^[\w.+-]{1,40}$/.test(program)) return false;
-  const home = env.HOME || homedir();
+  const home = userHome(env);
   let user = env.USER || env.LOGNAME || '';
   if (!user) try { user = userInfo().username; } catch { /* none */ }
   const dirs = pathDirs(env);
@@ -137,7 +138,7 @@ function deltaParts(text: string): string[] {
  * the host reads PostToolUseFailure's context (Codex has none), any other's where it reads PostToolUse's.
  */
 export function wallsAtStop(st: SkillSessionState, ctx: GateCtx): number {
-  const home = ctx.env.HOME || homedir();
+  const home = userHome(ctx.env);
   const sh = ctx.sessionHash;
   const seen: NonNullable<Parameters<typeof noteWalls>[0]['seen']> = [];
   const reached = new WeakSet<object>();

@@ -18,7 +18,6 @@
  * Pure: reads only the run's calls (commands already secret-checked by the
  * fold). Never throws.
  */
-import { homedir } from 'node:os';
 import { secretReason } from '../notes/secrets.js';
 import { gatedKind } from '../skills/risk.js';
 import { neverSave } from '../skills/never-save.js';
@@ -28,6 +27,7 @@ import { commandKind, leadingCds, normalizeCommand, relativizePaths, splitTop, s
 import { afterTimeout, programOfText } from './shell-words.js';
 import { ASSIGN, base, unquote, words } from './shell-scan.js';
 import type { FixDelta, RepairEvent, RunCall, RunState } from './types.js';
+import { userHome } from "../util/home.js";
 
 /** Where relativized delta text points: `$HOME` for home, `./` for the repo root (4.12 step 5). */
 export interface RepairOpts { home?: string; root?: string }
@@ -203,7 +203,7 @@ export function fixDelta(failed: RunCall, retry: RunCall, between: RunCall[], op
     if (!f || !r) return [];
     const flags = addedFlags(f, r);
     if (!flags) return [];
-    const home = opts.home ?? homedir();
+    const home = opts.home ?? userHome();
     const root = opts.root ?? '';
     const rel = (t: string) => relativizePaths(t, root, home);
     const out: FixDelta[] = [];

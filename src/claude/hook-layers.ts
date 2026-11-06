@@ -21,10 +21,11 @@
  * hook loads it.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { PACKAGE_FOR } from "../brand.js";
 import { detectHost, type Host } from "../trace/host.js";
+import { userHome } from "../util/home.js";
+import { claudeDir } from "../util/home.js";
 
 /** Hosts that run the ~/.claude copy as well as the repo's. */
 const RUNS_GLOBAL_COPY: ReadonlySet<Host> = new Set<Host>(["claude", "cursor"]);
@@ -41,7 +42,7 @@ const COMMAND = /^node\s+"([^"]+)"\s+(\S+)(?:\s+\|\|\s+exit\s+0)?$/;
  * is the hook's stdin, when the caller has it: a host that doesn't run the
  * ~/.claude copy never stands down.
  */
-export function globalCopyCovers(event: string, shim: string | undefined, home: string = homedir(), env: NodeJS.ProcessEnv = process.env, payload?: unknown): boolean {
+export function globalCopyCovers(event: string, shim: string | undefined, home: string = userHome(), env: NodeJS.ProcessEnv = process.env, payload?: unknown): boolean {
   if (!shim) return false;
   if (payload !== undefined && !RUNS_GLOBAL_COPY.has(detectHost(payload).host)) return false;
   // Claude Code reads its user settings from CLAUDE_CONFIG_DIR when that is
@@ -53,11 +54,11 @@ export function globalCopyCovers(event: string, shim: string | undefined, home: 
   // hooks never run for them.
   const repoCopy = basename(at) === ".trail" || (basename(at) === "helpers" && basename(dirname(at)) === ".claude");
   if (!repoCopy) return false;
-  const helpers = resolve(home, ".claude", "helpers");
+  const helpers = resolve(claudeDir(home, env), "helpers");
   if (at === helpers) return false; // this is the ~/.claude copy
   let settings: { hooks?: Record<string, unknown> };
   try {
-    settings = JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8"));
+    settings = JSON.parse(readFileSync(join(claudeDir(home, env), "settings.json"), "utf8"));
   } catch {
     return false;
   }

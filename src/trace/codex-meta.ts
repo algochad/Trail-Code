@@ -4,14 +4,14 @@
  * own rollout (HC6). Split from codex.ts, which reads the lines. Never throws; never waits on a FIFO.
  */
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import type { CodexMeta } from './types.js';
+import { userHome } from "../util/home.js";
 
 const META_BYTES = 64 * 1024;
 /** CODEX_HOME, else $HOME/.codex. */
 export function codexHome(env: NodeJS.ProcessEnv = process.env): string {
-  return env.CODEX_HOME ? resolve(env.CODEX_HOME) : join(env.HOME || homedir(), '.codex');
+  return env.CODEX_HOME ? resolve(env.CODEX_HOME) : join(userHome(env), '.codex');
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);

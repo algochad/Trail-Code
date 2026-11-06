@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homeEnv, tmpRepo } from "./helpers.js";
 import { mergeTrailLocal, pluginHooks, trailHookCmd } from "../src/claude/settings-merge.js";
@@ -61,6 +61,14 @@ test("trail hook with no event exits 0 too", () => {
 
 /* ---- init without Claude Code settings ---- */
 
+/** Every file under `dir`, relative, with forward slashes. */
+function filesUnder(dir: string): string[] {
+  return (existsSync(dir) ? (readdirSync(dir, { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[]) : [])
+    .filter((e) => e.isFile())
+    .map((e) => join(e.parentPath, e.name).slice(dir.length + 1).split("\\").join("/"))
+    .sort();
+}
+
 function gitRepoWithCode(tag: string): string {
   const d = tmpRepo(tag);
   spawnSync("git", ["init", "-q", "-b", "main"], { cwd: d });
@@ -87,19 +95,56 @@ test("init --no-hooks --no-statusline sets up .trail/, the graph and the skill, 
   assert.ok(existsSync(join(home, ".claude", "skills", "trail", "SKILL.md")), "the skill file is written");
 });
 
-test("a session refresh after init --no-hooks does not bring the hooks back", () => {
+test("hooks run after init --no-hooks, even with an old wiring stamp, write nothing of their own and never bring the hooks back", () => {
   const home = tmpRepo("plugin-refresh-home");
   const d = gitRepoWithCode("plugin-refresh");
   assert.equal(trail(["init", d, "--agents", "claude", "--no-hooks", "--no-statusline", "--no-build"], home).status, 0);
-  const stamp = JSON.parse(readFileSync(join(d, ".trail", "cache", ".cache", "wiring-stamp.json"), "utf8"));
+  const stampPath = join(d, ".trail", "cache", ".cache", "wiring-stamp.json");
+  const stamp = JSON.parse(readFileSync(stampPath, "utf8"));
   assert.equal(stamp.opts.hooks, false);
   assert.equal(stamp.opts.statusline, false);
-  // An upgrade: the stamp names an older version, the next session start rewrites the wiring with the flags it kept.
-  writeFileSync(join(d, ".trail", "cache", ".cache", "wiring-stamp.json"), JSON.stringify({ ...stamp, version: "0.0.1" }));
-  const out = trail(["hook", "session-start"], home, { cwd: d, input: JSON.stringify({ cwd: d, session_id: "s1" }), env: { CLAUDE_PROJECT_DIR: d } });
-  assert.equal(out.status, 0, out.err);
+  writeFileSync(stampPath, JSON.stringify({ ...stamp, version: "0.0.1" }));
+  for (const event of ["session-start", "prompt", "stop"]) {
+    const out = trail(["hook", event], home, { cwd: d, input: JSON.stringify({ cwd: d, session_id: "s1", prompt: "hello there, how does alpha work" }), env: { CLAUDE_PROJECT_DIR: d } });
+    assert.equal(out.status, 0, out.err);
+  }
   assert.equal(existsSync(join(d, ".claude", "settings.json")), false, "still no settings.json");
   assert.equal(existsSync(join(home, ".claude", "settings.json")), false);
+});
+
+test("init --plugin writes nothing under ~/.claude, no skill, no hooks, no status line, and says in .trail/ that a plugin owns the hooks", () => {
+  const home = tmpRepo("plugin-flag-home");
+  const d = gitRepoWithCode("plugin-flag");
+  const r = trail(["init", d, "--agents", "claude", "--plugin"], home, { env: { CLAUDE_CONFIG_DIR: join(home, ".claude") } });
+  assert.equal(r.status, 0, r.err);
+  assert.deepEqual(filesUnder(home).filter((f) => !f.startsWith(".trail/")), [], "outside the temp home's .trail/");
+  assert.equal(existsSync(join(home, ".claude")), false);
+  assert.equal(existsSync(join(home, ".claude.json")), false);
+  assert.equal(existsSync(join(d, ".claude")), false, "nothing in the repo's .claude either");
+  assert.equal(existsSync(join(d, ".mcp.json")), false);
+  assert.deepEqual(JSON.parse(readFileSync(join(d, ".trail", "plugin-managed.json"), "utf8")), { hooks: "plugin" });
+  assert.ok(existsSync(join(d, ".trail", "cache")), "the code map is built");
+});
+
+test("a repo that says its hooks are plugin-managed is a trail repo: hooks keep their state in .trail/, never graft/", () => {
+  const home = tmpRepo("plugin-brand-home");
+  const d = gitRepoWithCode("plugin-brand");
+  assert.equal(trail(["init", d, "--agents", "claude", "--plugin", "--no-build"], home).status, 0);
+  const out = trail(["hook", "stop"], home, { cwd: d, input: JSON.stringify({ cwd: d, session_id: "s9" }), env: { CLAUDE_PROJECT_DIR: d } });
+  assert.equal(out.status, 0, out.err);
+  assert.equal(existsSync(join(d, "graft")), false);
+});
+
+test("trail skill export --out writes the SKILL.md init would write, and touches nothing else", () => {
+  const home = tmpRepo("skill-export-home");
+  const out = join(tmpRepo("skill-export-out"), "plugin", "skills", "trail");
+  const r = trail(["skill", "export", "--out", out], home, { env: { CLAUDE_CONFIG_DIR: join(home, ".claude") } });
+  assert.equal(r.status, 0, r.err);
+  assert.equal(filesUnder(home).filter((f) => !f.startsWith(".trail/")).length, 0);
+  // The same bytes init puts in ~/.claude/skills/trail/SKILL.md.
+  const other = tmpRepo("skill-export-home2");
+  assert.equal(trail(["init", gitRepoWithCode("skill-export-repo"), "--agents", "claude", "--no-build"], other).status, 0);
+  assert.equal(readFileSync(join(out, "SKILL.md"), "utf8"), readFileSync(join(other, ".claude", "skills", "trail", "SKILL.md"), "utf8"));
 });
 
 test("init --no-hooks alone still writes the status line, and no hooks", () => {

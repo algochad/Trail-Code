@@ -17,7 +17,6 @@
  * SessionStart's part is in start-skills.ts.
  */
 import type { Host } from '../trace/host.js';
-import { homedir } from 'node:os';
 import type { HookOut } from '../skills/types.js';
 import type { RunState, SkillInjection, SkillSessionState } from '../trace/types.js';
 import { askText, matchJob } from '../trace/jobs.js';
@@ -46,6 +45,7 @@ import { stopBlockReason } from '../skills/offer-words.js';
 import { recallMarks, saidIn, shownFiles, stepLearnings, withFixes } from '../skills/follow-learnings.js';
 import { readSession } from './state.js';
 import { payloadSessionId } from './hook-io.js';
+import { userHome } from "../util/home.js";
 
 export { sessionStartSkills } from './start-skills.js';
 
@@ -206,7 +206,7 @@ function saveAsk(ctx: GateCtx, st: SkillSessionState, fold: FoldResult | null, t
   // D93: the run's own checkout, as both halves of the save gate compile it.
   const root = runCheckout(sheet, env, ctx.repoKey === sheet.repoKey ? ctx.checkout : '');
   const compiled = compileRun(sheet, {
-    repoRoot: root, home: env.HOME || homedir(), platform: process.platform,
+    repoRoot: root, home: userHome(env), platform: process.platform,
     prior: findPriorSheet(sheet, env), moment: 'asked', applies: scope === 'every repo' ? 'every repo' : run.repoKey, now: ctx.now, askedWith: typed,
     readSheet: (id) => readRunSheet(id, env), taken: (n) => nameTaken(n, { repoKeys: keys, checkout: root || ctx.checkout, env }) !== null,
     learnings: stepLearnings({ repoKeys: [sheet.repoKey], checkout: root, env }),

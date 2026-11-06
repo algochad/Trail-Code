@@ -17,7 +17,6 @@
  */
 import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { everyRepoLearnings } from '../notes/every-repo.js';
 import { repoPlace } from '../notes/home.js';
@@ -35,6 +34,8 @@ import { replaySession, sessionHashOf, type Replay } from './replay-runs.js';
 import { discoverSessions } from './sessions.js';
 import { dayOf } from './transcript.js';
 import type { InitCandidate, LookBack } from './types.js';
+import { userHome } from "../util/home.js";
+import { claudeDir } from "../util/home.js";
 
 export interface LookBackOpts {
   env: NodeJS.ProcessEnv;
@@ -119,7 +120,7 @@ export function lookBack(dir: string, opts: LookBackOpts): LookBackResult {
   const t0 = Date.now();
   const env = opts.env;
   const now = opts.now ?? new Date();
-  const home = env.HOME || homedir();
+  const home = userHome(env);
   const lb: LookBackResult = { sessions: [], skipped: [], days: 0, from: null, to: null, parent: 0, candidates: [], alreadyKept: { here: 0, elsewhere: [] }, howtos: [], ms: 0, errors: [] };
   const fail = (what: string, e: unknown) => lb.errors.push(`couldn't read ${what} this time (${e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80)})`);
   const progress = opts.onProgress;
@@ -184,7 +185,7 @@ export function lookBack(dir: string, opts: LookBackOpts): LookBackResult {
     let howtos: ReturnType<typeof readHowtos> = [];
     try {
       const keys = [...new Set(found.sessions.map((s) => (s.path ? basename(dirname(s.path)) : '')).filter(Boolean))];
-      howtos = readHowtos(keys, env.CLAUDE_CONFIG_DIR || join(home, '.claude'));
+      howtos = readHowtos(keys, claudeDir(home, env));
       lb.howtos = [...new Set(howtos.map((h) => h.file))];
     } catch (e) {
       fail('your Claude Code how-to files', e);

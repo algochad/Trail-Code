@@ -12,7 +12,7 @@
  * shell lexer files already on the path; node:fs and node:crypto come from
  * `process.getBuiltinModule`. TRAIL_HOME is resolved as gate-file.ts does.
  */
-import { homedir, userInfo } from 'node:os';
+import { userInfo } from 'node:os';
 import { delimiter, dirname, isAbsolute, join } from 'node:path';
 import type * as Fs from 'node:fs';
 import type * as Crypto from 'node:crypto';
@@ -20,6 +20,7 @@ import { sessionPath, trailHomeFast } from './gate-file.js';
 import { normalizeCommand, stripTimeout } from './shell.js';
 import { afterTimeout, simpleCommands } from './shell-words.js';
 import { ASSIGN, words } from './shell-scan.js';
+import { userHome } from "../util/home.js";
 
 /** J16's words, then the way out (R29), as information about the denied command (D88). */
 export const SURE_FAIL_REASON = '[trail] Trail, the tool this person installed, stopped this command before it ran: '
@@ -150,7 +151,7 @@ function executableIn(dir: string, env: NodeJS.ProcessEnv): boolean {
 
 /** PATH dirs from env, then the fixed folders of 4.11. */
 export function timeoutOnPath(env: NodeJS.ProcessEnv): boolean {
-  const home = env.HOME || homedir();
+  const home = userHome(env);
   let user = env.USER || env.LOGNAME || '';
   if (!user) try { user = userInfo().username; } catch { /* none */ }
   const dirs = pathDirs(env);

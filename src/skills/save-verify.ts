@@ -11,7 +11,6 @@
  * session's host dialect (4.16): Claude Code's lines by their own flags,
  * Codex's typed lines only by the prompt hook's hashes (P30).
  */
-import { homedir } from 'node:os';
 import type { FoldResult } from '../trace/runs.js';
 import type { GateCtx } from '../trace/skill-session.js';
 import type { JobClass, PendingOffer, RunCall, RunSheet, SkillSessionState } from '../trace/types.js';
@@ -43,6 +42,7 @@ import { hostFacts } from './host-facts.js';
 import { offerLinesOf } from './offer-lines.js';
 import { runCheckout } from './run-checkout.js';
 import { stepLearnings } from './follow-learnings.js';
+import { userHome } from "../util/home.js";
 
 export interface SaveVerdict {
   deny?: string;                // set: refuse, nothing saved
@@ -336,7 +336,7 @@ export function verifySave(cmd: SkillsAddCmd | null, ctx: GateCtx, st: SkillSess
   };
   const sr = st.saveRequest;
   const compiled = compileRun(own, {
-    repoRoot: root, home: env.HOME || homedir(), platform: process.platform, readSheet: read, now: ctx.now,
+    repoRoot: root, home: userHome(env), platform: process.platform, readSheet: read, now: ctx.now,
     prior: findPriorSheet(own, env), name: cmd.name, moment: c.consent === 'offer-yes' ? 'repeated' : 'asked', askedWith,
     applies: c.consent === 'asked' && sr?.scope === 'every repo' ? 'every repo' : own.repoKey,
     // The asked name is free here so compile keeps it; step 9 says where it is taken.

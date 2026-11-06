@@ -11,8 +11,8 @@
  *   wrote anywhere else, or linked into that folder, is not one.
  */
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
+import { claudeDir } from "../util/home.js";
 
 /** A read-only descriptor of a plain file, or a throw. `follow`: a link to a plain file is allowed. */
 export function openPlain(path: string, opts: { follow?: boolean } = {}): number {
@@ -49,7 +49,7 @@ export function readPlain(path: string, max: number): string | null {
 /** Claude Code's projects folder for `env`, real path; null when there is none. */
 export function claudeProjectsDir(env: NodeJS.ProcessEnv = process.env): string | null {
   try {
-    return realpathSync(join(env.HOME || homedir(), '.claude', 'projects'));
+    return realpathSync(join(claudeDir(undefined, env), 'projects'));
   } catch {
     return null;
   }

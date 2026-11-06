@@ -10,7 +10,6 @@
  * relativized and held to the never-save, gated and bypass lists (4.12,
  * D104). Nothing typed is in them.
  */
-import { homedir } from 'node:os';
 import type { FixDelta, PendingOffer, WallClass } from '../trace/types.js';
 import { WALL_CLASSES } from '../notes/learning-fields.js';
 import { flatLine } from '../notes/flatten.js';
@@ -29,6 +28,7 @@ import { checkLine, ordinalWord } from './offer-words.js';
 import { newOfferId, offerBudget } from './offers.js';
 import { compileOffered, skillSha, type OfferDue, type OfferInput } from './offer-moment.js';
 import { withFollowLine } from './follow-learnings.js';
+import { userHome } from "../util/home.js";
 
 /** The words of a moment-3 offer (4.13, J06) and of its saved wall lesson (4.15). Said as they are. */
 export const REPAIR_COPY: Record<string, string> = {
@@ -151,7 +151,7 @@ export function repairOfferDue(i: OfferInput): OfferDue | { due: false; why: Why
   const sheet = i.sheet;
   if (!sheet || sheet.id !== run.id || !run.repoKey) return { due: false, why: 'no-sheet' };
   // The run is still open at Stop, so its repairs are read from its calls now (run close fills run.repairs).
-  const repairs = (run.repairs ?? detectRepairs(run, { home: env.HOME || homedir(), root: ctx.checkout }))
+  const repairs = (run.repairs ?? detectRepairs(run, { home: userHome(env), root: ctx.checkout }))
     .filter((r) => (WALL_CLASSES as readonly string[]).includes(r.cls) && programKey(r.program));
   if (!repairs.length) return { due: false, why: 'no-repair' };
   if (run.skillId) return { due: false, why: 'skill' };

@@ -15,7 +15,6 @@
  */
 import { createHash } from 'node:crypto';
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
-import { homedir } from 'node:os';
 import type { FoldResult } from '../trace/runs.js';
 import type { PreBashDecision } from '../claude/pre-bash.js';
 import type { CompiledSkill, Receipt } from './types.js';
@@ -40,6 +39,7 @@ import { heldRunId, nameTaken, readSkillsStateSafe } from './save-store.js';
 import { hookError } from '../claude/skills-hook-util.js';
 import { codexSandboxRefusal } from './codex-sandbox.js';
 import { stepLearnings } from './follow-learnings.js';
+import { userHome } from "../util/home.js";
 
 export { parseSkillsAdd, parseSkillsLesson, SAVE_GATE_RE, SKILLS_ADD_RE, SKILLS_LESSON_RE, type SkillsAddCmd, type SkillsLessonCmd } from './save-parse.js';
 export { DENY, verifySave, type SaveVerdict } from './save-verify.js';
@@ -265,7 +265,7 @@ function holdUnbacked(cmd: SkillsAddCmd, env: NodeJS.ProcessEnv, now: Date, why:
   const where = nameTaken(cmd.name, scope);
   if (where !== null && where !== 'held') return fail(`trail · not saved: the name ${cmd.name} is taken. Use another: trail skills add <other> --run ${flatLine(cmd.runId, 40)}`);
   const c = compileRun(sheet, {
-    repoRoot: root, home: env.HOME || homedir(), platform: process.platform, now,
+    repoRoot: root, home: userHome(env), platform: process.platform, now,
     readSheet: (id) => readRunSheet(id, env), name: cmd.name, moment: 'asked', applies: sheet.repoKey, taken: (n) => n !== cmd.name && nameTaken(n, scope) !== null,
     learnings: stepLearnings({ repoKeys: [sheet.repoKey], checkout: root, env }),
   });

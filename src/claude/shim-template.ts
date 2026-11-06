@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { FLAT_LINE_JS } from '../notes/flatten.js';
 import { trailHome } from '../notes/home.js';
 import { writeJsonAtomic } from '../util/state.js';
 import { claudeDistDir } from './paths.js';
+import { userHome } from "../util/home.js";
 
 // Generates the tiny `.cjs` shims committed into a repo's `.claude/helpers/`. Their only
 // job is to locate the installed `@nanonets/graft` package's `dist/claude/<entry>.js` and
@@ -273,7 +273,7 @@ export function statuslineShim(): string { return shim('statusline.js', 'm.main(
 export function hooksShim(): string { return shim('hooks.js', 'm.main(process.argv[2])', OFFER_TRAIL, true); }
 
 /** Where `rememberInstall` writes, and the shims read: `<trail home>/install.json`. */
-export function installHintPath(home: string = homedir(), env: NodeJS.ProcessEnv = process.env): string {
+export function installHintPath(home: string = userHome(), env: NodeJS.ProcessEnv = process.env): string {
   return join(trailHome(env, home), HINT_FILE);
 }
 
@@ -289,7 +289,7 @@ export function installHintPath(home: string = homedir(), env: NodeJS.ProcessEnv
  * where there is nothing a shim could load. Best-effort: without the file the
  * shims still find the package on their own.
  */
-export function rememberInstall(home: string = homedir(), env: NodeJS.ProcessEnv = process.env, dist: string = claudeDistDir()): void {
+export function rememberInstall(home: string = userHome(), env: NodeJS.ProcessEnv = process.env, dist: string = claudeDistDir()): void {
   if (!existsSync(join(dist, 'hooks.js'))) return;
   try { writeJsonAtomic(installHintPath(home, env), { claudeDist: dist }); } catch { /* the shims resolve without it */ }
 }

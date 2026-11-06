@@ -17,7 +17,6 @@
  * the sessions since.
  */
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { BAR, LEARNING_SCHEMA, learningBody, sameLearning, verifyLearnings, type Learning } from "./bar.js";
 import { callClaude, claudeBin, COLD_START_MODEL, norm, scrub, type ClaudeFailure, type QuoteSource } from "../notes/cold-start.js";
 import { type PastSession } from "../init/sessions.js";
@@ -29,6 +28,7 @@ import { noteAuthor } from "../notes/git-facts.js";
 import { ensureRepoHome } from "../notes/home.js";
 import { shortDate, writeNote, type Note } from "../notes/notes.js";
 import { alreadySaid, codeAnchors, knownText } from "../notes/team-check.js";
+import { userHome } from "../util/home.js";
 
 /** About 25k tokens: a handful of recent sessions, whole where it matters. */
 const SESSION_DIGEST_CHARS = 100_000;
@@ -177,7 +177,7 @@ export async function findSessionLearnings(
   const sessions = opts.since ? found.filter((s) => s.at > opts.since!) : found;
   const base = { sessions: sessions.length, read: 0, findings: [] as Learning[], model, ...(newest ? { newest } : {}) };
   if (!sessions.length) return { ...base, durationMs: Date.now() - started, reason: "no_sessions" };
-  const bin = claudeBin(env.HOME || homedir());
+  const bin = claudeBin(userHome(env));
   if (!bin) return { ...base, durationMs: Date.now() - started, reason: "no_claude", why: "not_installed" };
   const { text, sources, read } = sessionsDigest(sessions, SESSION_DIGEST_CHARS, { full: opts.full });
   if (!read.length) return { ...base, durationMs: Date.now() - started, reason: "no_sessions" };
@@ -202,7 +202,7 @@ export async function findSessionLearnings(
 /** The repo's past sessions, found in a worker so init's first lines and its spinner don't wait on the transcripts. */
 async function pastSessions(repo: string, env: NodeJS.ProcessEnv): Promise<PastSession[]> {
   try {
-    return (await discoverOffThread(repo, env.HOME || homedir(), env)).sessions;
+    return (await discoverOffThread(repo, userHome(env), env)).sessions;
   } catch {
     return [];
   }

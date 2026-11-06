@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { main } from '../src/claude/hooks.js';
-import { readStamp, runningVersion } from '../src/upkeep.js';
+import { readStamp, writeStamp } from '../src/upkeep.js';
 import { tmpRepo } from './helpers.js';
 
 /** A repo that looks like a previous `graft init` ran here, with no stamp — i.e.
@@ -64,25 +64,16 @@ function contextOf(stdout: string): string {
   return JSON.parse(stdout).hookSpecificOutput.additionalContext as string;
 }
 
-test('session-start refreshes stale wiring and stamps it', async () => {
+test('session-start with stale wiring writes nothing and says how to refresh it', async () => {
   const repo = wiredRepo('hook-refresh');
-  const ctx = contextOf(await runHook('session-start', repo, homeWithCache('hook-refresh-home', null)));
-
-  assert.match(ctx, /refreshed this repo's agent wiring/);
-  assert.match(ctx, /written by unwired, now /);
-  // The wiring was actually re-written, not just announced.
-  assert.ok(existsSync(join(repo, '.claude', 'settings.json')));
-  assert.ok(existsSync(join(repo, '.claude', 'skills', 'graft', 'SKILL.md')));
-  assert.equal(readStamp(repo)?.version, runningVersion());
-  assert.deepEqual(readStamp(repo)?.hosts, ['claude']);
-});
-
-test('session-start says nothing on a second run — the stamp now matches', async () => {
-  const repo = wiredRepo('hook-idempotent');
-  const home = homeWithCache('hook-idempotent-home', null);
-  await runHook('session-start', repo, home);
+  const home = homeWithCache('hook-refresh-home', null);
+  writeStamp(repo, '0.0.1', ['claude']);
   const ctx = contextOf(await runHook('session-start', repo, home));
-  assert.doesNotMatch(ctx, /refreshed this repo's agent wiring/);
+  assert.match(ctx, /wiring was written by 0\.0\.1, this is .*: run trail init to refresh it/);
+  assert.equal(existsSync(join(repo, '.claude', 'settings.json')), false, 'not rewritten');
+  assert.equal(existsSync(join(repo, '.claude', 'skills')), false);
+  assert.equal(existsSync(join(home, '.claude')), false);
+  assert.equal(readStamp(repo)?.version, '0.0.1', 'the stamp is init\'s to write');
 });
 
 test('an unwired repo is left completely alone', async () => {

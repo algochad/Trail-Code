@@ -10,10 +10,10 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
 import type { PlannedWrite } from './plan.js';
 import { readJsonObject, type ConfigWrite } from './config-write.js';
 import { trailOnPath, type Brand } from '../brand.js';
+import { userHome } from "../util/home.js";
 
 /** MCP registration reports the same write-result record every installer does. */
 export type McpWrite = ConfigWrite;
@@ -195,7 +195,7 @@ export function mcpTargets(
   ids: string[],
   opts: { home?: string; name?: Brand } = {},
 ): McpTarget[] {
-  const home = opts.home ?? homedir();
+  const home = opts.home ?? userHome();
   const name = opts.name ?? 'graft';
   const entry = serverEntry({ brand: name });
   const json = (hostId: string, id: string, path: string, topKey: string, e: object, scope: PlannedWrite['scope'] = 'repo') =>

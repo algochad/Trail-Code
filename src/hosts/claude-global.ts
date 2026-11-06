@@ -34,13 +34,14 @@ import { readJsonObject, writeOwned, type ConfigWrite } from './config-write.js'
 import { mergeJsonKey, serverEntry } from './mcp-config.js';
 import type { PlannedWrite } from './plan.js';
 import type { Brand } from '../brand.js';
+import { claudeDir, claudeJsonPath } from "../util/home.js";
 
 /** Same `{ id, path, action }` contract every other writer in this layer reports. */
 export type GlobalWrite = ConfigWrite;
 
 /** The directory the user-level shim lives in — the base every hook command names. */
 export function globalHelpersDir(home: string): string {
-  return join(home, '.claude', 'helpers');
+  return join(claudeDir(home), 'helpers');
 }
 
 /**
@@ -59,8 +60,8 @@ export function claudeGlobalTargets(home: string, brand: Brand = 'graft'): Plann
     ({ hostId: 'claude', id, path, scope: 'global', kind, what });
   const writes = [
     g('claude-global-shim', join(globalHelpersDir(home), 'graft-hooks.cjs'), 'hook', 'hooks shim (user level)'),
-    g('claude-global-hooks', join(home, '.claude', 'settings.json'), 'hook', 'SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / Stop'),
-    g('claude-global-mcp', join(home, '.claude.json'), 'mcp', `mcpServers.${brand}`),
+    g('claude-global-hooks', join(claudeDir(home), 'settings.json'), 'hook', 'SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / Stop'),
+    g('claude-global-mcp', claudeJsonPath(home), 'mcp', `mcpServers.${brand}`),
   ];
   // trail registers no server for Claude Code: the hooks and the `trail` command do its work.
   return brand === 'trail' ? writes.slice(0, 2) : writes;
@@ -94,7 +95,7 @@ function upsertGlobalHooks(id: string, path: string, helpers: string): GlobalWri
  */
 export function installClaudeGlobal(home: string, brand: Brand = 'graft'): GlobalWrite[] {
   const [shim, settings] = claudeGlobalTargets(home, brand);
-  const mcp = { id: 'claude-global-mcp', path: join(home, '.claude.json') };
+  const mcp = { id: 'claude-global-mcp', path: claudeJsonPath(home) };
   const out: GlobalWrite[] = [];
 
   try {
@@ -159,7 +160,7 @@ function dropUserServer(id: string, path: string, name: string): GlobalWrite {
  */
 export function disableGraftServerIn(home: string, folder: string): GlobalWrite {
   const id = 'claude-folder-graft-off';
-  const path = join(home, '.claude.json');
+  const path = claudeJsonPath(home);
   try {
     const loaded = readJsonObject(path);
     if (loaded === 'unparseable') return { id, path, action: 'skipped-unparseable' };
@@ -170,45 +171,6 @@ export function disableGraftServerIn(home: string, folder: string): GlobalWrite 
     const off = Array.isArray(here.disabledMcpServers) ? (here.disabledMcpServers as string[]) : [];
     if (off.includes('graft')) return { id, path, action: 'unchanged' };
     here.disabledMcpServers = [...off, 'graft'];
-    writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
-    return { id, path, action: 'updated' };
-  } catch {
-    return { id, path, action: 'skipped-unparseable' };
-  }
-}
-
-/**
- * A repo wired for trail commits `.mcp.json` with a `trail mcp` server. On a
- * teammate's machine that has graft but not the trail command, that server
- * can't start. So this folder gets a server of the same name, in Claude Code's
- * per-folder scope (which wins over the project's), that runs `graft mcp`: the
- * same program. graft's own user-level server goes off here, so the tools
- * aren't listed twice. Once `trail` is installed, the per-folder one goes and
- * the committed one runs. Takes effect from the next session in the folder.
- */
-export function fitTrailServerToMachine(home: string, folder: string, has: { trail: boolean; graft: boolean }): GlobalWrite {
-  const id = 'claude-folder-trail-server';
-  const path = join(home, '.claude.json');
-  try {
-    const loaded = readJsonObject(path);
-    if (loaded === 'unparseable') return { id, path, action: 'skipped-unparseable' };
-    const root = loaded.root;
-    const here = root.projects?.[folder] as { mcpServers?: Record<string, { command?: string }>; disabledMcpServers?: unknown } | undefined;
-    const ours = here?.mcpServers?.trail?.command === 'graft';
-    if (has.trail) {
-      if (!ours) return { id, path, action: 'unchanged' };
-      delete here!.mcpServers!.trail;
-    } else if (has.graft && !ours) {
-      const projects = (root.projects ??= {}) as Record<string, typeof here>;
-      const p = (projects[folder] ??= {})!;
-      p.mcpServers = { ...(p.mcpServers ?? {}), trail: { command: 'graft', args: ['mcp'] } as { command: string } };
-      if (root.mcpServers?.graft) {
-        const off = Array.isArray(p.disabledMcpServers) ? (p.disabledMcpServers as string[]) : [];
-        if (!off.includes('graft')) p.disabledMcpServers = [...off, 'graft'];
-      }
-    } else {
-      return { id, path, action: 'unchanged' };
-    }
     writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`);
     return { id, path, action: 'updated' };
   } catch {

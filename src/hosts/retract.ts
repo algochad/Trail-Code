@@ -25,7 +25,6 @@
  */
 import { readFileSync, writeFileSync, existsSync, rmSync, rmdirSync, statSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
 import { HOSTS, hostRelPath } from './registry.js';
 import { ALL_MARKERS, type Markers } from './sections.js';
 import { mcpTargets, stripTomlSection } from './mcp-config.js';
@@ -37,6 +36,7 @@ import { claudeTargetsFor, legacyClaudeTargets, TRAIL_HOOK, TRAIL_STATUSLINE, tr
 import { isGraftAllowEntry, isGraftFooterRegex } from '../claude/settings-merge.js';
 import type { WriteScope } from './plan.js';
 import type { Brand } from '../brand.js';
+import { userHome } from "../util/home.js";
 
 /** Both names a file can go by: graft's, and trail's in a repo that uses trail. */
 const NAMES: readonly Brand[] = ['graft', 'trail'];
@@ -368,7 +368,7 @@ interface Target extends Omit<Retraction, 'action'> {
  * added — see the module note.
  */
 function targets(repo: string, opts: RetractOpts): Target[] {
-  const home = opts.home ?? homedir();
+  const home = opts.home ?? userHome();
   const exclude = new Set(opts.exclude ?? []);
   const out: Target[] = [];
 

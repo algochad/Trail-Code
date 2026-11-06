@@ -22,8 +22,9 @@
  * session left open over lunch doesn't claim the lunch.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { userHome } from "../util/home.js";
+import { claudeDir } from "../util/home.js";
 
 export interface SessionCost {
   minutes: number;
@@ -44,8 +45,8 @@ export const FALLBACK_ACTIVE_MS = 30 * 60 * 1000;
 /** A transcript untouched this long belongs to some earlier session. */
 const ACTIVE_MS = 30 * 60 * 1000;
 
-export function claudeProjectDir(repo: string, home: string = homedir()): string {
-  return join(home, ".claude", "projects", repo.replace(/[^A-Za-z0-9]/g, "-"));
+export function claudeProjectDir(repo: string, home: string = userHome()): string {
+  return join(claudeDir(home), "projects", repo.replace(/[^A-Za-z0-9]/g, "-"));
 }
 
 /**

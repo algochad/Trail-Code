@@ -32,7 +32,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { readJson, writeJsonAtomic } from "../util/state.js";
 import { readBranchCache } from "./branches.js";
@@ -40,13 +39,14 @@ import { hasRepoTrail, learningFiles, learningsDir } from "./repo-trail.js";
 import { liveLearnings, readLearningFields, type LearningFields } from "./learning-fields.js";
 import { matter } from "../util/front-matter.js";
 import { trailHome } from "./trail-home.js";
+import { userHome } from "../util/home.js";
 
 export { trailHome };
 
 /** A path as people read it: `~/.trail/…` under the home folder, absolute otherwise. */
 export function shownPath(p: string): string {
   if (!isAbsolute(p)) return p;
-  const home = homedir();
+  const home = userHome();
   const rel = relative(home, p);
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? `~/${rel.split(sep).join("/")}` : p.split(sep).join("/");
 }

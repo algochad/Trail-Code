@@ -17,8 +17,8 @@
  * This file imports nothing heavier than node:fs, because the hooks load it.
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
+import { userHome } from "./util/home.js";
 
 export type Brand = "trail" | "graft";
 
@@ -84,13 +84,16 @@ export function inBrand(text: string, b: Brand = brand()): string {
 /* hooks and the statusline                                                   */
 /* -------------------------------------------------------------------------- */
 
+/** The file in a repo's `.trail/` that says a Claude Code plugin owns its hooks (written by `trail init --plugin`/`--no-hooks`). */
+export const PLUGIN_MARKER = "plugin-managed.json";
+
 /**
  * `trail init` wired this repo under trail's names: its committed hooks shim,
  * skill or settings say trail. Read from the repo, not the machine, so every
  * teammate's agent speaks the same name whichever command they installed.
  */
 export function repoWiredForTrail(dir: string): boolean {
-  if (existsSync(join(dir, ".trail", "hook.cjs"))) return true;
+  if (existsSync(join(dir, ".trail", "hook.cjs")) || existsSync(join(dir, ".trail", PLUGIN_MARKER))) return true;
   if (existsSync(join(dir, ".claude", "helpers", "trail-hooks.cjs")) || existsSync(join(dir, ".claude", "skills", "trail", "SKILL.md"))) return true;
   try {
     const settings = readFileSync(join(dir, ".claude", "settings.json"), "utf8");
@@ -129,8 +132,13 @@ export function adoptRepoBrand(
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function noticeStampPath(home: string = homedir()): string {
-  return join(home, ".graft", "rename-notice.json");
+/** Trail's own folder: `$TRAIL_HOME`, else `<home>/.trail`. Everything a hook or notice remembers goes under it, nowhere else. */
+function trailDir(home: string): string {
+  return process.env.TRAIL_HOME ? resolve(process.env.TRAIL_HOME) : join(home, ".trail");
+}
+
+export function noticeStampPath(home: string = userHome()): string {
+  return join(trailDir(home), "state", "rename-notice.json");
 }
 
 /** Whether a `trail` executable is on PATH. Only checked when the notice is due. */
@@ -240,8 +248,8 @@ export function strandedRepoNotice(input: { cwd: string; tty: boolean; env?: Nod
 
 const WEEK_MS = 7 * DAY_MS;
 
-export function handoverStampPath(home: string = homedir()): string {
-  return join(home, ".graft", "trail-handover.json");
+export function handoverStampPath(home: string = userHome()): string {
+  return join(trailDir(home), "state", "trail-handover.json");
 }
 
 /**

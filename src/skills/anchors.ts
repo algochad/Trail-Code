@@ -18,7 +18,6 @@
  */
 import { readdirSync, statSync } from 'node:fs';
 import { branchGone, exists, gitOf, readSmall, type Git } from './anchors-git.js';
-import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import type { ParsedSkill } from './types.js';
 import { flatLine } from '../notes/flatten.js';
@@ -27,6 +26,7 @@ import { programWords } from '../trace/shell-words.js';
 import { unquote } from '../trace/shell-scan.js';
 import { FIXED_DIRS, pathDirs, programFiles } from '../trace/guard-fast.js';
 import { wideGone, type WideKind } from './anchors-wide.js';
+import { userHome } from "../util/home.js";
 
 export type AnchorKind = 'program' | 'script' | 'make' | 'file' | 'branch' | WideKind;
 export interface Anchor {
@@ -282,7 +282,7 @@ const VERSION_DIRS = ['.volta/bin', '.bun/bin', '.cargo/bin', 'go/bin', '.pyenv/
 
 /** The hook's PATH, 4.11's fixed folders and the version managers' folders (R35). */
 function programDirs(env: NodeJS.ProcessEnv): string[] {
-  const home = env.HOME || homedir();
+  const home = userHome(env);
   const dirs = pathDirs(env);
   for (const d of FIXED_DIRS) {
     if (d.startsWith('$HOME')) dirs.push(join(home, d.slice('$HOME'.length)));
@@ -377,7 +377,7 @@ export function goneAnchors(skill: ParsedSkill, cwd: string, env: NodeJS.Process
     if (!gits.has(at)) gits.set(at, gitOf(at));
     return gits.get(at)!;
   };
-  const home = env.HOME || homedir();
+  const home = userHome(env);
   for (const a of anchorsOf(skill)) {
     try {
       if (a.kind === 'program') {

@@ -5,7 +5,6 @@
  */
 import { statSync, writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, rmdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { homedir } from 'node:os';
 import { HOSTS, detectHosts, hostRelPath, hostWiringName, type DetectProbe, type HostTarget } from './registry.js';
 import { GRAFT_MARKERS, markersFor, upsertSection } from './sections.js';
 import type { Brand } from '../brand.js';
@@ -15,6 +14,7 @@ import { installCursorHooks } from './cursor-hooks.js';
 import type { ConfigWrite } from './config-write.js';
 import { installAntigravitySkill } from './antigravity.js';
 import { rememberInstall } from '../claude/shim-template.js';
+import { userHome } from "../util/home.js";
 
 export interface HostsInitResult {
   written: { id: string; path: string; action: string }[];
@@ -66,7 +66,7 @@ export function runHostsInit(
     brand?: Brand;
   } = {},
 ): HostsInitResult {
-  const home = opts.home ?? homedir();
+  const home = opts.home ?? userHome();
   const probe = probeFor(home, repo);
   const name = hostWiringName(repo, opts.brand);
 

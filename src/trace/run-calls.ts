@@ -15,7 +15,7 @@
  * A result where the host refused to run the command (the person said no, a
  * classifier or hook blocked it, D51) counts as never run.
  */
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { flatLine } from '../notes/flatten.js';
 import { secretReason } from '../notes/secrets.js';
@@ -28,6 +28,7 @@ import { bareCommand, heredocInterpreter, isMultiLine, leadingCds, normalizeComm
 import { programWords } from './shell-words.js';
 import { matchWall } from './walls.js';
 import type { CallKind, JobClass, RunCall, RunCallPart, RunState } from './types.js';
+import { userHome } from "../util/home.js";
 
 export const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 /** Longer raw commands are never compiled or kept (redactSecrets refuses them, 4.10). */
@@ -53,7 +54,7 @@ function cdTarget(arg: string, folder: string, home: string): string | null {
  * The entry's folder, then each leading `cd` in order; null when unknown. `cd -` goes back to the folder
  * before the last `cd` of this call; with none before it, that folder was the shell's, so it is unknown.
  */
-export function effectiveFolder(entryCwd: string | null, raw: string, home: string = homedir()): string | null {
+export function effectiveFolder(entryCwd: string | null, raw: string, home: string = userHome()): string | null {
   if (!entryCwd) return null;
   let folder: string | null = entryCwd;
   let prev: string | null = null;
@@ -187,7 +188,7 @@ export function callParts(segs: Segment[], job: JobClass | null): RunCallPart[] 
 }
 
 /** A RunCall from a Bash tool_call (4.1), before its result. */
-export function makeCall(ev: CallEvent, raw: string, job: JobClass | null, placeOf: PlaceOf, fallbackCwd: string | null, home: string = homedir()): RunCall {
+export function makeCall(ev: CallEvent, raw: string, job: JobClass | null, placeOf: PlaceOf, fallbackCwd: string | null, home: string = userHome()): RunCall {
   const input = ev.input && typeof ev.input === 'object' ? (ev.input as Record<string, unknown>) : {};
   const segs = splitTop(raw);
   const truncated = raw.length > MAX_RAW;

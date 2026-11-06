@@ -7,11 +7,11 @@
  *
  * Pure but for reading the transcript. Never throws: an unreadable file reads as tampered.
  */
-import { homedir } from 'node:os';
 import { trailHome } from '../notes/trail-home.js';
 import { lineEvents, type TraceEvent } from '../trace/claude.js';
 import { isHookScriptTamper, tamperOf, type TamperCtx } from '../trace/tamper.js';
 import { eachLine } from './transcript.js';
+import { userHome } from "../util/home.js";
 
 /** A mark that taints only its own turn when looking back. */
 export const turnOnly = (mark: string | null): boolean => mark !== null && isHookScriptTamper(mark);
@@ -27,7 +27,7 @@ function markOf(name: string, input: unknown, cwd: unknown, ctx: TamperCtx): str
  * after a hook run in the same turn would otherwise be lost when the turn's mark is cleared.
  */
 export function writeMarkIn(chunk: TraceEvent[], ctx: { trailHome: string; transcriptPath: string; checkout?: string }): string | null {
-  const c: TamperCtx = { trailHome: ctx.trailHome, transcriptPath: ctx.transcriptPath, home: homedir(), folder: ctx.checkout || null };
+  const c: TamperCtx = { trailHome: ctx.trailHome, transcriptPath: ctx.transcriptPath, home: userHome(), folder: ctx.checkout || null };
   for (const ev of chunk) {
     if (ev.kind !== 'tool_call') continue;
     const m = markOf(ev.name, ev.input, ev.cwd, c);
@@ -41,7 +41,7 @@ export function writeMarkIn(chunk: TraceEvent[], ctx: { trailHome: string; trans
  * or a hook script run by hand with no typed line between it and `to` (the line at `to` included).
  */
 export function tamperedBefore(path: string, to: number, env: NodeJS.ProcessEnv): boolean {
-  const ctx: TamperCtx = { trailHome: trailHome(env), transcriptPath: path, home: env.HOME || homedir() };
+  const ctx: TamperCtx = { trailHome: trailHome(env), transcriptPath: path, home: userHome(env) };
   const memo: Record<string, unknown> = {};
   let write = false;
   let hook = false;

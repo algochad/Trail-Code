@@ -14,11 +14,12 @@
  * The PreToolUse fast path imports this file, so it loads only node:path and
  * node:os; node:fs comes from `process.getBuiltinModule`, as pre-bash.ts does.
  */
-import { homedir, userInfo } from 'node:os';
+import { userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import type * as Fs from 'node:fs';
 import type { OfferChannel } from '../trace/types.js';
 import type { Host, Tier } from '../trace/host.js';
+import { userHome } from "../util/home.js";
 
 export interface HostFacts {
   /** Where moment 2's offer goes (3.5): 'stop' = a Stop block whose reason the agent says;
@@ -67,7 +68,7 @@ function nodeFs(): typeof Fs | null {
 }
 
 function homeOf(env: NodeJS.ProcessEnv): string {
-  return env.HOME || env.USERPROFILE || homedir();
+  return env.HOME || env.USERPROFILE || userHome();
 }
 
 /** `$HOME/.trail-lab` exists. On a Node without getBuiltinModule nothing can say so: false. */
@@ -94,9 +95,9 @@ function personsOwn(env: NodeJS.ProcessEnv): boolean {
   try {
     account = userInfo().homedir;
   } catch {
-    account = homedir();
+    account = userHome();
   }
-  const used = env.TRAIL_HOME ? resolve(env.TRAIL_HOME) : join(homedir(), '.trail');
+  const used = env.TRAIL_HOME ? resolve(env.TRAIL_HOME) : join(userHome(), '.trail');
   return canonical(used) === canonical(join(account, '.trail'));
 }
 

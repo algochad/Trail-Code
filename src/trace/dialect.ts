@@ -9,12 +9,12 @@
  * get none: their transcripts are not folded.
  */
 import { lstatSync, realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { lineEvents, readNewEvents, typedText, type EventReadOptions, type TraceEvent } from './claude.js';
 import type { Memo } from './cursor.js';
 import { codexLineEvents, codexMeta, codexTranscriptOk, codexTypedByPerson, readNewCodexEvents } from './codex.js';
 import type { SkillSessionState } from './types.js';
+import { claudeDir } from "../util/home.js";
 
 export interface DialectReadOptions extends EventReadOptions {
   /** Codex: the session state whose typed hashes decide the person's lines (P30). Claude ignores it. */
@@ -51,7 +51,7 @@ function real(p: string): string | null {
 
 /** Where Claude Code keeps its transcripts: `~/.claude/projects` (HOME from env) and `$CLAUDE_CONFIG_DIR/projects`. */
 function claudeProjects(env: NodeJS.ProcessEnv): string[] {
-  const roots = [join(env.HOME || homedir(), '.claude', 'projects')];
+  const roots = [join(claudeDir(undefined, env), 'projects')];
   if (env.CLAUDE_CONFIG_DIR) roots.push(join(env.CLAUDE_CONFIG_DIR, 'projects'));
   return roots.flatMap((r) => {
     const p = real(r);

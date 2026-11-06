@@ -14,7 +14,6 @@
  */
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { CompiledSkill, FoldOp, LedgerUse, SkillRef, SkillState } from './types.js';
 import type { RunSheet, SkillInjection, SkillSessionState } from '../trace/types.js';
@@ -35,6 +34,7 @@ import { MAX_SKILL_BYTES } from './store-fs.js';
 import { nextVersion } from './versions.js';
 import { fillParams } from './params.js';
 import { recallMarks, stepLearnings, whose } from './follow-learnings.js';
+import { userHome } from "../util/home.js";
 
 export type PlanInj = Pick<SkillInjection, 'params' | 'steps' | 'at' | 'check'>;
 /** `inj`: the block's injection (Stop passes the live one); else it is found in `st`, else in the run's session file. */
@@ -131,7 +131,7 @@ function gather(skillId: string, runId: string, env: NodeJS.ProcessEnv, o: PlanO
   const ids = [...new Set([runId, ...(joined.joined ?? []).map((j) => j.id)])];
   const inj = o.inj ?? injIn(o.st, skillId, ids) ?? (needInj ? injIn(sessionOf(sheet, env), skillId, ids) : null);
   if (needInj && !inj) return null;
-  const home = env.HOME || homedir();
+  const home = userHome(env);
   const repoRoot = runCheckout(joined, env, '');
   // c3's credit flush keys extraShas with the same `where` (one function for both), or two-uses never matches (R10).
   const fid = fidelityOf(skill, inj ?? { params: {}, steps: [] }, joined.calls, fidelityWhere(joined, env));

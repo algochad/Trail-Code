@@ -20,12 +20,14 @@
  */
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, readdirSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { checkoutRoot, remoteKey, repoPlace } from "../notes/home.js";
 import { claudeProjectDir } from "../notes/session-cost.js";
 import { openPlain } from "./plain-file.js";
 import { dayOf, firstCwd, scanTranscript, sessionOf, type PastSession, type SessionSource } from "./transcript.js";
+import { userHome } from "../util/home.js";
+import { claudeDir } from "../util/home.js";
 
 export { ownWords, readSession, type PastPrompt, type PastSession, type SessionSource } from "./transcript.js";
 
@@ -83,11 +85,11 @@ export function repoRoots(repo: string): string[] {
  * project's folder under ~/.claude/projects; each folder's first transcript
  * says where it ran, and that folder's git config names its remote (#662).
  */
-export function sameRepoRoots(repo: string, home: string = homedir()): string[] {
+export function sameRepoRoots(repo: string, home: string = userHome()): string[] {
   const roots = new Set(repoRoots(repo));
   const mine = remoteKey(repo)?.key;
   if (!mine) return [...roots];
-  const projects = join(home, ".claude", "projects");
+  const projects = join(claudeDir(home), "projects");
   let dirs: string[];
   try {
     dirs = readdirSync(projects);
@@ -132,7 +134,7 @@ function above(dir: string, path: string): boolean {
  * each file's own `cwd`. Kept for callers that only know roots;
  * `discoverSessions` is what init uses.
  */
-export function sessionFiles(roots: string[], home: string = homedir()): string[] {
+export function sessionFiles(roots: string[], home: string = userHome()): string[] {
   const prefixes = roots.map((r) => basename(claudeProjectDir(r, home)));
   return transcriptFiles(home).filter(({ folder, path }) => {
     if (!prefixes.some((p) => folder === p || folder.startsWith(p + "-"))) return false;
@@ -147,7 +149,7 @@ export function sessionFiles(roots: string[], home: string = homedir()): string[
  * another person's sessions among them, and init takes them as the person's words. So is anything not a plain file.
  */
 function transcriptFiles(home: string): { folder: string; path: string; size: number; mtimeMs: number; readable: boolean }[] {
-  const projects = join(home, ".claude", "projects");
+  const projects = join(claudeDir(home), "projects");
   let folders: string[];
   try {
     folders = readdirSync(projects);
@@ -263,7 +265,7 @@ export interface Discovery {
  * `now`, sessions in a scratch folder, headless runs, ancestor sessions under the share, files that can't be
  * read. Reads only; never throws.
  */
-export function discoverSessions(repo: string, home: string = homedir(), now: Date = new Date(), env: NodeJS.ProcessEnv = process.env): Discovery {
+export function discoverSessions(repo: string, home: string = userHome(), now: Date = new Date(), env: NodeJS.ProcessEnv = process.env): Discovery {
   const found: Discovery = { sessions: [], bySource: { own: 0, worktree: 0, clone: 0, ancestor: 0 }, skippedAncestor: 0, sessionDays: 0, days: 0, skipped: [] };
   const skip = (path: string, why: SkipWhy) => found.skipped!.push({ path, why });
   try {

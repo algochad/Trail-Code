@@ -11,7 +11,6 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { brand, tag } from '../brand.js';
 import { scopeOf, scopesOfGraph } from '../graph/scopes.js';
 import { keepsNotes } from '../notes/home.js';
@@ -22,6 +21,7 @@ import { promptPart } from './skills-wiring.js';
 import { readSession, readStats, writeSession } from './state.js';
 import { readWiring } from './stats.js';
 import { ownText, PASTE_MARK } from '../trace/claude.js';
+import { claudeDir } from "../util/home.js";
 
 /** Prompts shorter than this never trigger the graph ask — they are almost always
  * conversational ("yes go ahead", "thanks") and the coverage gate can't judge
@@ -80,7 +80,7 @@ export function promptAskTimeout(dir: string): number {
  * machine at once, and such a repo has no `.claude/settings.json` at all.
  */
 function hookSettingsFiles(dir: string): string[] {
-  const user = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
+  const user = claudeDir();
   return [
     join(dir, '.claude', 'settings.json'),
     join(dir, '.claude', 'settings.local.json'),

@@ -18,13 +18,13 @@
  */
 import { createHash } from 'node:crypto';
 import { closeSync, fstatSync, readSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { isTypedByPerson, typedText } from '../trace/claude.js';
 import { leadingCds, onlyTrail, simpleCommands } from '../trace/shell.js';
 import { tamperOf } from '../trace/tamper.js';
 import { trailHome } from '../notes/trail-home.js';
 import { claudeTranscript, openPlain } from './plain-file.js';
 import { KEEP_LINE, RELAY_LINE } from './relay.js';
+import { userHome } from "../util/home.js";
 
 /** How much of the transcript is read: the list is printed moments before the answer. */
 export const TAIL_BYTES = 8 * 1024 * 1024;
@@ -166,7 +166,7 @@ export function afterList(path: string, list: { offset: number; via: 'init-call'
   /** How many reply parts came before the newest typed line. */
   let upTo = 0;
   let tampered = false;
-  const ctx = { trailHome: trailHome(env), transcriptPath: path, home: env.HOME || homedir() };
+  const ctx = { trailHome: trailHome(env), transcriptPath: path, home: userHome(env) };
   for (const [k, { line, offset }] of lines.entries()) {
     if (k === 0 && list.via === 'init-call') continue;
     let e: Entry;

@@ -8,7 +8,6 @@
  * name is checked to be one folder name before it is joined to a path.
  */
 import { chmodSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, type Stats } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { CompiledSkill, SkillFrom, SkillRef, SkillState } from './types.js';
 import { trailPath, withLock, writePrivate, type Locked } from '../util/private-fs.js';
@@ -18,6 +17,7 @@ import { getSkillState, updateSkillState } from './state.js';
 import { localDate } from './settings.js';
 import { randomBytes } from 'node:crypto';
 import { linkedOwnFolder, ownFolder } from './own-folder.js';
+import { userHome } from "../util/home.js";
 
 const POSIX = process.platform !== 'win32';
 /** SKILL.md is at most 60 lines; anything this big is not one. */
@@ -140,7 +140,7 @@ export function checkSaveName(name: string): void {
 /** The skill folders other tools keep in the person's home (`~/.claude/skills`, `~/.agents/skills`, `$CLAUDE_CONFIG_DIR/skills`). */
 export function homeSkillDirs(env?: NodeJS.ProcessEnv): string[] {
   const e = env ?? process.env;
-  const home = e.HOME || homedir();
+  const home = userHome(e);
   const dirs = [join(home, '.claude', 'skills'), join(home, '.agents', 'skills')];
   if (e.CLAUDE_CONFIG_DIR) dirs.push(join(e.CLAUDE_CONFIG_DIR, 'skills'));
   return dirs;

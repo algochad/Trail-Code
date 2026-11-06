@@ -91,17 +91,19 @@ test("one trail init over a repo 0.23.0 set up wires every hook the skills need,
   assertWired(repo, home);
 });
 
-test("one session start on a newer version refreshes a repo 0.23.0 set up the same way", () => {
+test("a session start on a newer version only says how to refresh a repo 0.23.0 set up, and rewrites nothing", () => {
   const { repo, home } = v023("start");
+  const files = [join(repo, ".claude", "settings.json"), join(home, ".claude", "settings.json"), join(repo, ".trail", "hook.cjs"), join(home, ".claude", "helpers", "graft-hooks.cjs")];
+  const before = files.map((f) => readFileSync(f, "utf8"));
   const saved = { home: process.env.HOME, trail: process.env.TRAIL_HOME, profile: process.env.USERPROFILE, brand: process.env[BRAND_ENV] };
   process.env.HOME = home;
   process.env.USERPROFILE = home;
   process.env.TRAIL_HOME = join(home, ".trail");
   process.env[BRAND_ENV] = "trail";
   try {
-    const r = runUpkeep(repo, "99.0.0", { background: false, home });
-    assert.match(r.lines.join("\n"), /refreshed this repo's agent wiring \(written by 0\.23\.0, now 99\.0\.0\): claude/);
-    assertWired(repo, home);
+    const r = runUpkeep(repo, "99.0.0");
+    assert.match(r.lines.join("\n"), /wiring was written by 0\.23\.0, this is 99\.0\.0: run trail init to refresh it/);
+    assert.deepEqual(files.map((f) => readFileSync(f, "utf8")), before, "nothing was rewritten");
   } finally {
     for (const [k, v] of [["HOME", saved.home], ["TRAIL_HOME", saved.trail], ["USERPROFILE", saved.profile], [BRAND_ENV, saved.brand]] as const)
       if (v === undefined) delete process.env[k]; else process.env[k] = v;

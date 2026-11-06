@@ -8,7 +8,6 @@
  * what a real run touches.
  */
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { statSync } from 'node:fs';
 import { HOSTS, detectHosts, hostRelPath, hostWiringName, type DetectProbe, type HostTarget } from './registry.js';
 import { mcpTargets } from './mcp-config.js';
@@ -18,6 +17,7 @@ import { antigravitySkillTargets } from './antigravity.js';
 import { claudeTargets } from '../claude/init.js';
 import { brand, type Brand } from '../brand.js';
 import { claudeGlobalTargets } from './claude-global.js';
+import { userHome } from "../util/home.js";
 
 /** Where a write lands. 'global' = outside the repo, affects every project. */
 export type WriteScope = 'repo' | 'global';
@@ -67,7 +67,7 @@ function instructionTarget(repo: string, host: HostTarget, name: Brand): Planned
  * default. `ids`, when given, restricts the plan to those hosts.
  */
 export function planInit(repo: string, opts: { home?: string; ids?: string[] } = {}): HostPlan[] {
-  const home = opts.home ?? homedir();
+  const home = opts.home ?? userHome();
   const probe = probeFor(home, repo);
   const detected = new Set(detectHosts(probe).map((h) => h.id));
   const name = hostWiringName(repo, brand());

@@ -19,7 +19,6 @@
  */
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, relative, isAbsolute, sep } from 'node:path';
 import type { PreBashDecision } from '../claude/pre-bash.js';
 import type { FoldResult } from '../trace/runs.js';
@@ -46,6 +45,7 @@ import { bashCommand, tailCalls, tamperInTail, type ToolCall } from './save-gate
 import { listAllPersonal } from './store.js';
 import { writeNewVersion, writeProposal } from './versions.js';
 import { replan, type Replanned } from './update-plan.js';
+import { userHome } from "../util/home.js";
 
 export { parseSkillsUpdate, SKILLS_UPDATE_RE as UPDATE_RE, type SkillsUpdateCmd } from './save-parse.js';
 export { foldInputFor, proposalShaOf, replan, type PlanInj, type PlanOpts, type Replanned } from './update-plan.js';
@@ -243,9 +243,9 @@ function updateInTranscript(r: UpdateReceipt, name: string, offerId: string, cal
   });
 }
 
-/** A path as the person reads it: `~/…` under their home (Windows may set only USERPROFILE, which homedir() reads). */
+/** A path as the person reads it: `~/…` under their home (Windows may set only USERPROFILE, which userHome() reads). */
 function shown(p: string, env: NodeJS.ProcessEnv): string {
-  const home = env.HOME || homedir();
+  const home = userHome(env);
   const rel = home && isAbsolute(p) ? relative(home, p) : '';
   // Forward slashes either way: the person pastes it into Git Bash or PowerShell on Windows, and both take them.
   return rel && !rel.startsWith('..') && !isAbsolute(rel) ? `~/${rel.split(sep).join('/')}` : p.split(sep).join('/');

@@ -3,10 +3,10 @@
  * touched in each, and the files its text names by path.
  */
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { changedFiles, ownPath } from "./git-facts.js";
 import { checkoutRoot, childCheckouts, repoPlace } from "./home.js";
+import { claudeDir } from "../util/home.js";
 
 export interface NoteTarget {
   /** A folder in the repo the note goes to. */
@@ -53,7 +53,7 @@ export function noteTargets(dir: string, edited: string[] = [], since?: number, 
   if (here.git) add(here.checkout, changedFiles(here.checkout, since, TOUCH_LIMIT, uncommitted));
   else if (edited.length === 0) for (const c of childCheckouts(here.checkout)) add(c, changedFiles(c, since, TOUCH_LIMIT, uncommitted));
   // The agent's own files (memory, plans, scratch under ~/.claude) aren't what a note is about.
-  const agentFiles = join(homedir(), ".claude") + sep;
+  const agentFiles = claudeDir() + sep;
   const place = (f: string): [string, string] | null => {
     if (f.startsWith(agentFiles)) return null;
     const top = checkoutRoot(dirname(f));

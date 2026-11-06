@@ -48,7 +48,7 @@ export type CompileResult =
 
 export interface CompileOpts {
   repoRoot: string;
-  home: string;                 // os.homedir()
+  home: string;                 // the user's home
   platform: NodeJS.Platform;
   prior?: RunSheet | null;      // findPriorSheet(sheet): the previous checked run of the same job (varied params)
   name?: string;                // agent-given name; validated

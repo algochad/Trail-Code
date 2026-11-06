@@ -13,7 +13,6 @@
  * scrubbed, and a note that still looks like one is skipped.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { readJson, writeJsonAtomic } from "../util/state.js";
 import { sameRepoRoots, scrub } from "./cold-start.js";
@@ -22,6 +21,7 @@ import { ensureRepoHome } from "./home.js";
 import { shortDate, writeNote, type Note } from "./notes.js";
 import { claudeProjectDir } from "./session-cost.js";
 import { alreadySaid, codeAnchors, knownText } from "./team-check.js";
+import { userHome } from "../util/home.js";
 
 export type MemoryType = "project" | "reference" | "feedback" | "user" | "other";
 
@@ -57,7 +57,7 @@ const BODY_CHARS = 1500;
 /* -------------------------------------------------------------------------- */
 
 /** The memory folders of this repo's checkouts on this machine: its own, its worktrees', and other clones'. */
-export function memoryDirs(repo: string, home: string = homedir()): string[] {
+export function memoryDirs(repo: string, home: string = userHome()): string[] {
   return [...new Set(sameRepoRoots(repo, home).map((r) => join(claudeProjectDir(r, home), "memory")))];
 }
 
@@ -107,7 +107,7 @@ export function readMemoryNote(path: string): MemoryNote | null {
 }
 
 /** Every memory note of the repo's checkouts on this machine, newest first. */
-export function memoryNotes(repo: string, home: string = homedir()): MemoryNote[] {
+export function memoryNotes(repo: string, home: string = userHome()): MemoryNote[] {
   const out: MemoryNote[] = [];
   for (const dir of memoryDirs(repo, home)) {
     let files: string[];

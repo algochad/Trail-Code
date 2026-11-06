@@ -10,7 +10,6 @@
  * counts, hashes of typed lines and commands that ran (secret-checked).
  */
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import type { TraceEvent } from './claude.js';
@@ -36,6 +35,7 @@ export { MAX_CARRY_HOPS, joinCarriedSheet } from './run-join.js';
 export { runHelpers } from './run-calls.js';
 export { cutAtCompaction } from './run-turns.js';
 import { continuesOpenJob, cutAtCompaction, handedWait, movedOn } from './run-turns.js';
+import { userHome } from "../util/home.js";
 export { checkedSuccess, lastGoodRun } from './run-verdict.js';
 
 export interface FoldContext {
@@ -115,7 +115,7 @@ const lookFailed = (raw: string, isError: boolean, text: string) => isError && !
 /** Folds new events into the session's runs (4.1). Mutates st. */
 export function foldEvents(st: SkillSessionState, events: TraceEvent[], ctx: FoldContext): FoldResult {
   const res: FoldResult = { closed: [], lastAssistant: '', compactions: 0, typed: [] };
-  const home = homedir();
+  const home = userHome();
   const fix: RepairOpts = { home, root: ctx.checkout };
   const raws = new Map<string, string>();           // tool_use id -> raw command, this fold only
   const others = new Map<string, { run: RunState; edit: boolean }>(); // non-Bash calls, this fold only

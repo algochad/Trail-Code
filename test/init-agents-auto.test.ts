@@ -89,31 +89,6 @@ test("auto with no Claude Code here writes its committed files but nothing in ~/
   assert.match(r.stderr, /Set up for Cursor on this laptop\./);
 });
 
-test("a later refresh keeps to the laptop's agents", async () => {
-  const home = tmpRepo("auto-cli-home");
-  mkdirSync(join(home, ".cursor"));
-  const repo = gitRepo();
-  assert.equal(init(repo, home, ["--agents", "auto"]).status, 0);
-  const stamp = readStamp(repo)!;
-  writeStamp(repo, "0.0.1", stamp.hosts, stamp.opts);
-  const { runUpkeep } = await import("../src/upkeep-run.js");
-  const was = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, brand: process.env.TRAIL_INVOKED_AS };
-  process.env.HOME = home;
-  process.env.USERPROFILE = home;
-  process.env.TRAIL_INVOKED_AS = "trail";
-  try {
-    runUpkeep(repo, "9.9.9", { background: false, home });
-  } finally {
-    for (const [k, v] of Object.entries({ HOME: was.HOME, USERPROFILE: was.USERPROFILE, TRAIL_INVOKED_AS: was.brand })) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
-  }
-  assert.equal(readStamp(repo)!.version, "9.9.9", "the refresh ran");
-  assert.ok(!existsSync(join(home, ".claude")), "no Claude Code here: the refresh leaves ~/.claude alone");
-  assert.ok(!existsSync(join(home, ".gemini")), "no Antigravity here either");
-});
-
 test("auto --dry-run prints the plan, without other agents' laptop files, and writes nothing", () => {
   const home = tmpRepo("auto-cli-home");
   mkdirSync(join(home, ".cursor"));

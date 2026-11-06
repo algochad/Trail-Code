@@ -1,7 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, basename, isAbsolute, relative, resolve } from 'node:path';
-import { homedir } from 'node:os';
 import { readWiring } from './stats.js';
 import { formatBlastRadius, formatOrientation, notesOnTouch, standingDirective, teamNotesDirective, type Touch } from './format.js';
 import { commitLines, listNotes, setupCommitLine, standingLearnings } from '../notes/notes.js';
@@ -18,8 +17,7 @@ import { hostsWiredForTrail } from '../hosts/registry.js';
 import { handleStopEvent } from './stop.js';
 import { main as preBashMain } from './pre-bash.js';
 import { classifyToolUse, commandInvokesGraft, isMcpToolName, isGraftMcpTool, parseSavings, recordToolUse, type ToolKind } from './session-metrics.js';
-import { adoptRepoBrand, brand, commandOnPath, repoWiredForTrail, tag, trailHandoverLine, trailOnPath } from '../brand.js';
-import { fitTrailServerToMachine } from '../hosts/claude-global.js';
+import { adoptRepoBrand, brand, tag, trailHandoverLine } from '../brand.js';
 import { globalCopyCovers } from './hook-layers.js';
 import { keepsNotes, noteCounts, repoPlace, type NoteCounts } from '../notes/home.js';
 import { branchesStale, overlapMark, readBranchCache, refreshBranches, SESSION_REFRESH_MS } from '../notes/branches.js';
@@ -32,6 +30,7 @@ import type { Note } from '../notes/notes.js';
 import { hostFacts } from '../skills/host-facts.js';
 import { trailNow } from '../skills/settings.js';
 import { keptContext, keptNotice } from './start-init.js';
+import { userHome } from "../util/home.js";
 
 export { lastFileScopeHint, promptAskTimeout } from './prompt-hook.js';
 
@@ -409,15 +408,6 @@ function orientationAtStart(dir: string, learnings: StartLearnings): string {
   }
 }
 
-/** The repo's committed `.mcp.json` still registers trail's server (set up before 0.23). */
-function repoNamesTrailServer(dir: string): boolean {
-  try {
-    return Boolean(JSON.parse(readFileSync(join(dir, '.mcp.json'), 'utf8'))?.mcpServers?.trail);
-  } catch {
-    return false;
-  }
-}
-
 export async function main(event: string): Promise<void> {
   // Shims before pre-bash.js existed send PreToolUse here: hand it straight
   // over, before any of the work the other events share.
@@ -427,7 +417,7 @@ export async function main(event: string): Promise<void> {
   const input = readStdin();
   // Registered in the repo and in ~/.claude, Claude Code runs both: one answers.
   // Who sent the payload decides first: Copilot CLI runs only the repo's copy.
-  if (globalCopyCovers(event, process.argv[1], homedir(), process.env, input)) return;
+  if (globalCopyCovers(event, process.argv[1], userHome(), process.env, input)) return;
   const dir = projectDir(input);
   // A failed Bash call (PostToolUseFailure, D34): the skills mark, and 1b's wall fix as its one answer, before any of
   // the work the other events share.
@@ -439,10 +429,7 @@ export async function main(event: string): Promise<void> {
   if (event === 'session-start') {
     // The skills part first, so nothing below can skip it (a repo with no graft/INDEX.md included).
     const skills = await sessionStartPart(input, dir);
-    // Before anything is emitted: refresh this repo's wiring if it was written by
-    // an older graft, and pick up any cached "newer version on npm" answer.
-    // background:false — the registry check stays off the network here; the CLI
-    // and the MCP server fill that cache, this only reads it.
+    // Before anything is emitted: say so when this repo's wiring is out of date (it is not rewritten here).
     const upkeep = runUpkeep(dir, runningVersion()).lines;
     // On graft without trail, in a repo graft set up: once a week, the agent
     // tells the person how to get it.
@@ -451,9 +438,6 @@ export async function main(event: string): Promise<void> {
     // Once per repo: older versions kept the prompt in each session file.
     try { dropStoredPrompts(dir); } catch { /* tried again next session */ }
     trailAtStart(dir);
-    // A repo on trail, opened on a machine that has graft but not the trail command.
-    // Only while its .mcp.json still names a trail server: once it doesn't, trail: true takes back the stand-in.
-    if (repoWiredForTrail(dir)) fitTrailServerToMachine(homedir(), resolve(dir), { trail: trailOnPath() || !repoNamesTrailServer(dir), graft: commandOnPath('graft') });
     const text = orientationAtStart(dir, learningsAtStart(dir));
     const kept = keptAtStart(input, dir);
     // The skills context comes after the learnings; its notice is for the person.
