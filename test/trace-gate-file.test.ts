@@ -162,10 +162,10 @@ test("skillsOnFast reads settings.json with fs only, and agrees with readSetting
   }
 });
 
-test("fast-path safe: static imports are node:path, node:os and the shell lexer only", () => {
+test("fast-path safe: static imports are node:path, the home helper and the shell lexer only", () => {
   const src = readFileSync(new URL("../src/trace/gate-file.ts", import.meta.url), "utf8");
   const imports = [...src.matchAll(/^import\s+(?!type\b)[^'"]*from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
-  assert.deepEqual(imports.sort(), ["./shell.js", "node:os", "node:path"]);
+  assert.deepEqual(imports.sort(), ["../util/home.js", "./shell.js", "node:path"]);
   assert.doesNotMatch(src, /^import\s+(?!type\b)[^;]*from ['"]node:(fs|crypto)['"]/m, "type-only imports are erased; a value import is not");
   assert.doesNotMatch(src, /\bimport\(/, "no dynamic import either");
 });

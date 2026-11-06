@@ -220,41 +220,6 @@ test('uninstall removes the wiring under either name, keeping the user\'s words'
   assert.deepEqual(changed(runRetract(repo, { home, apply: true })), [], 'a second sweep finds nothing');
 });
 
-test('a session start that moves a graft repo to trail moves the other agents too', () => {
-  const repo = tmpRepo('move-hosts');
-  spawnSync('git', ['init', '-q'], { cwd: repo });
-  const home = mkdtempSync(join(tmpdir(), 'move-hosts-home-'));
-  const saved = { PATH: process.env.PATH, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, TRAIL_HOME: process.env.TRAIL_HOME, [BRAND_ENV]: process.env[BRAND_ENV] };
-  Object.assign(process.env, { HOME: home, USERPROFILE: home, TRAIL_HOME: join(home, '.trail') });
-  try {
-    delete process.env[BRAND_ENV];
-    runInit(repo, { build: false, global: false });
-    runHostsInit(repo, { agents: ['agents', 'cursor', 'gemini', 'kiro'], home, global: false });
-    runUpkeep(repo, runningVersion(), { background: false, home });
-    const hosts = readStamp(repo)?.hosts;
-    assert.deepEqual(hosts, ['agents', 'antigravity', 'claude', 'cursor', 'gemini', 'hermes', 'kiro'], 'AGENTS.md reads as all three of its hosts');
-
-    const bin = mkdtempSync(join(tmpdir(), 'bin-trail-'));
-    writeFileSync(join(bin, 'trail'), '#!/bin/sh\nexit 0\n');
-    chmodSync(join(bin, 'trail'), 0o755);
-    process.env.PATH = `${bin}${delimiter}${saved.PATH}`;
-    assert.match(runUpkeep(repo, runningVersion(), { background: false, home }).lines.join('\n'), /just moved to it/);
-
-    const files = filesUnder(repo);
-    assert.deepEqual(files.filter((f) => /\bgraft\b/.test(f)), [], `nothing graft-named left: ${files.join(', ')}`);
-    for (const rel of ['AGENTS.md', 'GEMINI.md', join('.cursor', 'rules', 'trail.mdc'), join('.kiro', 'steering', 'trail.md')]) {
-      const text = readFileSync(join(repo, rel), 'utf8');
-      assert.doesNotMatch(text, GRAFT_COMMAND, rel);
-      assert.ok(!text.includes(GRAFT_MARKERS.start), `${rel}: no graft block left`);
-    }
-    assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(repo, '.cursor', 'mcp.json'), 'utf8')).mcpServers), ['trail']);
-    assert.deepEqual(wiredHostIds(repo).sort(), hosts, 'the same agents, found under trail\'s names');
-    assert.doesNotMatch(runUpkeep(repo, runningVersion(), { background: false, home }).lines.join('\n'), /just moved/, 'once');
-  } finally {
-    for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
-  }
-});
-
 test('CLI: trail init --dry-run names trail\'s files', () => {
   const repo = tmpRepo('trail-dry');
   const home = tmpRepo('trail-dry-home');

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { underGraft, main, lastFileScopeHint, promptAskTimeout } from '../src/claude/hooks.js';
 import { readStats, readSession } from '../src/claude/state.js';
 import { runSync } from '../src/claude/sync-run.js';
+import { main as staleMain, staleCount } from '../src/claude/stale-run.js';
 import { savingsLine } from '../src/context/savings.js';
 import { writeStats, emptyStats, acquireLock, resolveContextDir } from '../src/claude/state.js';
 
@@ -753,7 +754,7 @@ test('prompt hook omits --dir when GRAFT_DIR is unset (byte-identical argv to be
   }
 });
 
-test('post-edit passes --dir <resolved> to graft check when GRAFT_DIR is set', async () => {
+test('the stale count passes --dir <resolved> to graft check when GRAFT_DIR is set', () => {
   const d = mkdtempSync(join(tmpdir(), 'graft-postedit-dir-'));
   mkdirSync(join(d, 'elsewhere', '.graph'), { recursive: true });
   writeFileSync(join(d, 'elsewhere', '.graph', 'wiring.json'),
@@ -764,23 +765,54 @@ test('post-edit passes --dir <resolved> to graft check when GRAFT_DIR is set', a
     stub,
     `const fs = require('fs');\n` +
       `fs.writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));\n` +
-      `process.stdout.write(JSON.stringify({ graph: { changed: [], added: [], removed: [] } }));\n`,
+      `process.stdout.write(JSON.stringify({ graph: { changed: ['a'], added: ['b'], removed: [] } }));\n`,
   );
-  process.env.CLAUDE_PROJECT_DIR = d;
   process.env.GRAFT_TEST_CLI = stub;
   process.env.GRAFT_DIR = 'elsewhere';
   try {
-    const stdin = JSON.stringify({ tool_input: { file_path: join(d, 'src', 'auth.ts') } });
-    await runWithStdin(stdin, () => main('post-edit'));
+    assert.equal(staleCount(d), 2);
     const argsSeen: string[] = JSON.parse(readFileSync(argsFile, 'utf8'));
     const dirIdx = argsSeen.indexOf('--dir');
     assert.ok(dirIdx !== -1, 'the check call carries --dir when GRAFT_DIR is set');
     assert.equal(argsSeen[dirIdx + 1], resolveContextDir(d));
   } finally {
     delete process.env.GRAFT_TEST_CLI;
-    delete process.env.CLAUDE_PROJECT_DIR;
     delete process.env.GRAFT_DIR;
   }
+});
+
+test('post-edit marks the graph dirty at once and hands the stale count to a detached run that only writes it while the edit is unsynced', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'graft-postedit-late-'));
+  mkdirSync(join(d, 'graft', '.graph'), { recursive: true });
+  const seen = join(d, 'stale-run-args.json');
+  const stub = join(d, 'stale-stub.cjs');
+  writeFileSync(stub, `require('fs').writeFileSync(${JSON.stringify(seen)}, JSON.stringify(process.argv.slice(2)));\n`);
+  process.env.CLAUDE_PROJECT_DIR = d;
+  process.env.GRAFT_TEST_STALE_RUN = stub;
+  try {
+    await runWithStdin(JSON.stringify({ tool_input: { file_path: join(d, 'src', 'auth.ts') } }), () => main('post-edit'));
+    const s = readStats(d)!;
+    assert.equal(s.dirty, true, 'dirty at once');
+    assert.equal(s.lastFile, 'auth.ts');
+    const deadline = Date.now() + 5000;
+    while (!existsSync(seen) && Date.now() < deadline) await new Promise((ok) => setTimeout(ok, 25));
+    assert.deepEqual(JSON.parse(readFileSync(seen, 'utf8')), [d], 'the detached run is handed the project folder');
+  } finally {
+    delete process.env.GRAFT_TEST_STALE_RUN;
+    delete process.env.CLAUDE_PROJECT_DIR;
+  }
+  // A late count never overwrites a finished sync: with the edit already synced, nothing is written.
+  writeStats(d, { ...emptyStats(), dirty: false, staleCount: 0 });
+  process.env.GRAFT_TEST_CLI = join(d, 'nope.cjs');
+  const saved = process.argv[2];
+  process.argv[2] = d;
+  try {
+    staleMain();
+  } finally {
+    process.argv[2] = saved as string;
+    delete process.env.GRAFT_TEST_CLI;
+  }
+  assert.equal(readStats(d)!.staleCount, 0);
 });
 
 test('session-start reads INDEX.md from a GRAFT_DIR-relocated context dir', async () => {

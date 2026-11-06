@@ -14,7 +14,9 @@
  *   - assistant turns are replayed verbatim (via `providerRaw`) so thinking-block
  *     signatures survive a multi-turn loop.
  */
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+
+// Loaded when a model is first called, not with this file: the SDK is hundreds of modules and most commands never use it.
 import { transportRetries } from "./types.js";
 import type { ChatModel, ChatRequest, ChatResponse, Message, ToolCall, ToolSpec, Usage } from "./types.js";
 
@@ -36,15 +38,15 @@ const cc = (on: boolean | undefined): CacheControl => (on ? { cache_control: { t
 
 export class AnthropicChatModel implements ChatModel {
   readonly label: string;
-  private client: Anthropic;
+  private client: Anthropic | null;
+  private clientOpts: { apiKey: string; baseUrl?: string };
   private model: string;
 
   constructor(opts: AnthropicChatModelOptions) {
     this.model = opts.model;
     this.label = opts.label ?? `${PROVIDER}:${opts.model}`;
-    this.client =
-      opts.client ??
-      new Anthropic({ apiKey: opts.apiKey, baseURL: opts.baseUrl, maxRetries: transportRetries() });
+    this.client = opts.client ?? null;
+    this.clientOpts = { apiKey: opts.apiKey, baseUrl: opts.baseUrl };
   }
 
   async create(req: ChatRequest): Promise<ChatResponse> {
@@ -98,7 +100,12 @@ export class AnthropicChatModel implements ChatModel {
       params.tools = tools;
     }
 
-    const resp = await this.client.messages.create(params);
+    const client = (this.client ??= new (await import("@anthropic-ai/sdk")).default({
+      apiKey: this.clientOpts.apiKey,
+      baseURL: this.clientOpts.baseUrl,
+      maxRetries: transportRetries(),
+    }));
+    const resp = await client.messages.create(params);
     return this.fromResponse(resp, fmt.kind);
   }
 

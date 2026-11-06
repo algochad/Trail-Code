@@ -19,7 +19,16 @@
  * structured reply the endpoint answers some other way. None of it changes the
  * bytes on the wire for an endpoint that behaves.
  */
-import OpenAI from "openai";
+import type OpenAI from "openai";
+
+// The SDK is loaded when a model is first called, not when this file is: it is hundreds of modules, and most commands
+// (every hook, every query) never talk to a model.
+let sdk: typeof OpenAI | null = null;
+/** Load the `openai` SDK once; later calls are free. */
+export async function loadOpenAI(): Promise<typeof OpenAI> {
+  return (sdk ??= (await import("openai")).default);
+}
+const isApiError = (err: unknown): err is InstanceType<typeof OpenAI.APIError> => sdk !== null && err instanceof sdk.APIError;
 import { transportRetries } from "./types.js";
 import { unwrapMarkdownFence } from "./recover-tool.js";
 import type { ChatModel, ChatRequest, ChatResponse, Message, ToolCall, ToolSpec, Usage } from "./types.js";
@@ -140,7 +149,7 @@ function toChatTool(t: ToolSpec): OpenAI.Chat.Completions.ChatCompletionTool {
  */
 function isRejectedObjectToolChoice(err: unknown): boolean {
   return (
-    err instanceof OpenAI.APIError &&
+    isApiError(err) &&
     err.status === 400 &&
     /tool_choice/i.test(String((err as { message?: string }).message ?? ""))
   );
@@ -155,7 +164,7 @@ function isRejectedObjectToolChoice(err: unknown): boolean {
  */
 function isRejectedMaxTokens(err: unknown): boolean {
   return (
-    err instanceof OpenAI.APIError &&
+    isApiError(err) &&
     err.status === 400 &&
     /max_tokens.*not supported.*max_completion_tokens/i.test(String((err as { message?: string }).message ?? ""))
   );
@@ -164,7 +173,7 @@ function isRejectedMaxTokens(err: unknown): boolean {
 /** Same reasoning-family models: temperature is fixed at 1, not caller-settable. */
 function isRejectedTemperature(err: unknown): boolean {
   return (
-    err instanceof OpenAI.APIError &&
+    isApiError(err) &&
     err.status === 400 &&
     /temperature.*does not support/i.test(String((err as { message?: string }).message ?? ""))
   );
@@ -184,7 +193,7 @@ function isRejectedTemperature(err: unknown): boolean {
 function isRejectedToolsWithReasoning(err: unknown): boolean {
   const message = String((err as { message?: string }).message ?? "");
   return (
-    err instanceof OpenAI.APIError &&
+    isApiError(err) &&
     err.status === 400 &&
     (/function tools with reasoning_effort/i.test(message) ||
       /thinking mode does not support this tool_choice/i.test(message))
@@ -315,7 +324,8 @@ function tryParse(s: string): unknown {
 
 export class OpenAIChatModel implements ChatModel {
   readonly label: string;
-  private client: OpenAI;
+  private client: OpenAI | null;
+  private clientOpts: { apiKey: string; baseUrl?: string; headers?: Record<string, string> };
   private model: string;
   private sleep: (ms: number) => Promise<void>;
   /** Key into {@link forcedToolChoiceIgnored}: one entry per endpoint + model. */
@@ -328,17 +338,23 @@ export class OpenAIChatModel implements ChatModel {
     this.sleep = opts.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     this.choiceKey = `${opts.baseUrl ?? ""}|${opts.model}`;
     this.forcedIgnored = forcedToolChoiceIgnored.has(this.choiceKey);
-    this.client =
-      opts.client ??
-      new OpenAI({
-        apiKey: opts.apiKey,
-        baseURL: opts.baseUrl,
-        defaultHeaders: opts.headers,
-        maxRetries: transportRetries(),
-      });
+    this.client = opts.client ?? null;
+    this.clientOpts = { apiKey: opts.apiKey, baseUrl: opts.baseUrl, headers: opts.headers };
+  }
+
+  /** The SDK client, built on first use. */
+  private async http(): Promise<OpenAI> {
+    const OpenAISdk = await loadOpenAI();
+    return (this.client ??= new OpenAISdk({
+      apiKey: this.clientOpts.apiKey,
+      baseURL: this.clientOpts.baseUrl,
+      defaultHeaders: this.clientOpts.headers,
+      maxRetries: transportRetries(),
+    }));
   }
 
   async create(req: ChatRequest): Promise<ChatResponse> {
+    await loadOpenAI();
     const messages = req.messages.map(toChatMessage);
     const tools = req.tools ? req.tools.map(toChatTool) : undefined;
     const params: ChatParams = { model: this.model, messages };
@@ -516,7 +532,7 @@ export class OpenAIChatModel implements ChatModel {
     // Bounded: one retry per known incompatibility below, never an open loop.
     for (let i = 0; i < 4; i++) {
       try {
-        return await this.client.chat.completions.create(attempt);
+        return await (await this.http()).chat.completions.create(attempt);
       } catch (err) {
         // Checked before the tool_choice fallback below: a reasoning refusal
         // also names tool_choice, and turning reasoning off keeps the caller's
@@ -542,7 +558,7 @@ export class OpenAIChatModel implements ChatModel {
         throw err;
       }
     }
-    return this.client.chat.completions.create(attempt);
+    return (await this.http()).chat.completions.create(attempt);
   }
 
   /**

@@ -616,6 +616,8 @@ The output is the value of the `hooks` key of a plugin's `hooks/hooks.json`: the
 
 `trail hook <event>` reads the hook payload on stdin, answers on stdout the way the host expects, and exits 0 whatever happens (bad input, an unknown event, a missing project folder), so a broken hook never stops a turn. The `|| exit 0` covers the one case it can't: `trail` not being on the machine.
 
+A hook starts a fresh process per call, so `trail hook` is built to start light: it is answered before the CLI loads, each event imports only what it needs, and V8's compile cache lives in `~/.trail/cache/node-compile`. `node scripts/bench-hooks.mjs` (after `npm run build`) times every event ten times with `{}` and with a realistic payload against a throwaway repo and HOME, and prints median and p95.
+
 Then set the repo up without touching Claude Code's settings:
 
 ```bash

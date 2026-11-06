@@ -8,8 +8,8 @@
  * 100+ providers (OpenAI, Anthropic, Gemini, Bedrock, Vertex, …) through one
  * endpoint without a per-vendor code path.
  */
-import OpenAI from "openai";
-import { OpenAIChatModel, type OpenAIChatModelOptions } from "./openai.js";
+import type OpenAI from "openai";
+import { loadOpenAI, OpenAIChatModel, type OpenAIChatModelOptions } from "./openai.js";
 import { transportRetries } from "./types.js";
 
 /** Conventional local address of a self-hosted LiteLLM proxy. */
@@ -44,7 +44,7 @@ export async function listLiteLLMModels(opts: {
 }): Promise<string[]> {
   const client =
     opts.client ??
-    new OpenAI({
+    new (await loadOpenAI())({
       apiKey: opts.apiKey,
       baseURL: opts.baseUrl ?? DEFAULT_LITELLM_BASE_URL,
       maxRetries: transportRetries(),

@@ -384,7 +384,7 @@ test("only cli-skills.ts uses the person-only setters, only offers.ts the bookke
 test("host-facts.ts is fast-path safe: no static node:fs, only node:path and node:os at load", () => {
   const text = readFileSync(join(SRC, "skills/host-facts.ts"), "utf8");
   const statics = [...text.matchAll(/^\s*(?:import|export)\s+(?!type\b)(?:[^'";]*?\sfrom\s+)?['"]([^'"]+)['"]/gm)].map((m) => m[1]!);
-  for (const spec of statics) assert.ok(["node:path", "node:os"].includes(spec), `static import ${spec}`);
+  for (const spec of statics) assert.ok(["node:path", "node:os", "../util/home.js"].includes(spec), `static import ${spec}`);
   assert.doesNotMatch(text, /\bimport\(\s*['"](?:node:)?fs/);
   assert.match(text, /getBuiltinModule/);
 });

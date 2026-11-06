@@ -19,12 +19,12 @@ import { resolveConfig, type EngineConfig } from "./ai/providers.js";
 import type { ProviderKind } from "./ai/llm/factory.js";
 import { formatCheckReport } from "./context/check.js";
 import { formatGraphCheckReport } from "./graph/check.js";
-import { buildGraphIfMissing, runInit } from "./claude/init.js";
 import { pluginHooks, statuslineWanted } from "./claude/settings-merge.js";
 import { skillTemplate } from "./claude/skill-template.js";
-import { runHostsInit } from "./hosts/init.js";
 import { codexStatusLines, codexTrustLine } from "./hosts/codex-trust.js";
 import { hostIds } from "./hosts/registry.js";
+import type { Retraction } from "./hosts/retract.js";
+import type { planInit as PlanInit } from "./hosts/plan.js";
 import { agentList, autoSelection, autoSummary } from "./hosts/auto.js";
 import { checkoutRoot, ensureRepoHome, keepsNotes, noteCount, rememberRepo, repoName, repoPlace, shownPath } from "./notes/home.js";
 import { brand, cmd, graftNotice, strandedRepoNotice, tag } from "./brand.js";
@@ -47,10 +47,6 @@ import {
   runWorkspaceMap,
 } from "./graph/workspace-cli.js";
 import { formatInitEpilogue } from "./cli-epilogue.js";
-import { planInit, selectedWrites } from "./hosts/plan.js";
-import { planRetract, runRetract, changed, type Retraction } from "./hosts/retract.js";
-import { compactWrites, formatNonInteractiveHelp, formatPlan, runPicker } from "./cli-picker.js";
-import { buildGraphWithProgress } from "./claude/build-progress.js";
 import { readCurrentVersion, readPackageName } from "./cli-meta.js";
 import { nativeFallbackNotice } from "./graph/native.js";
 import { patchBuildConfig, type BuildConfig } from "./util/state.js";
@@ -60,12 +56,7 @@ import { listSessionIds, readSession, sessionDir } from "./claude/state.js";
 import { costLabel, listNotes, noteName, notePlace, noteTargets, readingTokens, commitLines, PERSONAL_SAVED_LINE, PR_SPEEDUP, SECTIONS, tokensWorthSaying, sectionLead, shortDate, tokensLabel, writeNote, type Note, mentionedFiles } from "./notes/notes.js";
 import { aboutTerms, currentSessionCost } from "./notes/session-cost.js";
 import { unmarkedWords } from "./notes/flatten.js";
-import { beginLookBack, finishLookBack } from "./init/run.js";
-import { keepCommand } from "./init/keep.js";
-import { recordInit, snapInit } from "./init/install-paths.js";
 import { currentBranch, noteAuthor, teammatesOn } from "./notes/git-facts.js";
-import { listSkills } from "./skills/skills.js";
-import { registerSkillCommands } from "./skills/cli-skills.js";
 import { gateNote, namesRepoSymbol, symbolCandidates, trackedFiles } from "./notes/note-gate.js";
 import type { CheckResult } from "./check/types.js";
 import { checkLocally } from "./check/local-check.js";
@@ -81,6 +72,12 @@ import { writeStamp } from "./upkeep.js";
 import { userHome } from "./util/home.js";
 
 const program = new Command();
+
+/** What `init` and `uninstall` write with. Loaded when one of them runs, not at start-up (see cli-wiring.ts). */
+let wiring!: typeof import("./cli-wiring.js");
+async function loadWiring(): Promise<void> {
+  wiring = await import("./cli-wiring.js");
+}
 const currentVersion = readCurrentVersion(import.meta.url);
 
 /**
@@ -263,20 +260,14 @@ program
     refreshBranches(resolve(dir), { prs: true });
   });
 
-// What a Claude Code plugin's hooks run (see `hooks print`). Fails open: whatever goes wrong, the exit code is 0.
+// What a Claude Code plugin's hooks run (see `hooks print`). The bin answers it before this file loads (bin/trail.ts);
+// registered here too so `graft hook` and `--help` know it. Fails open: whatever goes wrong, the exit code is 0.
 program
   .command("hook", { hidden: true })
   .description("internal: run one Claude Code hook event, reading its payload on stdin; always exits 0")
   .argument("[event]", "the hook event, like session-start, prompt, pre-bash, post-edit or stop")
   .action(async (event?: string) => {
-    if (event) {
-      try {
-        await (await import("./claude/hooks.js")).main(event);
-      } catch {
-        /* a hook never fails the agent's turn */
-      }
-    }
-    process.exitCode = 0;
+    await (await import("./claude/hook-entry.js")).runHookCommand(event);
   });
 
 // The skill file `trail init` writes to ~/.claude/skills/trail, for a plugin that ships it itself.
@@ -989,7 +980,10 @@ grouped(program.command("note", { hidden: !TRAIL }), GROUP.memory)
 
 // `trail skills` (design 1.7): the skills Trail kept for you, held ones to keep, offers and the switch; and
 // `trail forget <name>`, the undo every save line names. The person-only ones refuse an agent (cli-skills.ts).
-registerSkillCommands(program);
+// Loading the skills commands costs about a tenth of a second, and a hook's child process starts this file for every query.
+// They are registered when something asks for them: `skills`, `forget`, help, or no command at all.
+const SKILLS_ASKED = process.argv.slice(2).some((a) => a === "skills" || a === "forget" || a === "help" || a === "-h" || a === "--help") || process.argv.slice(2).every((a) => a.startsWith("-"));
+if (SKILLS_ASKED) (await import("./skills/cli-skills.js")).registerSkillCommands(program);
 for (const c of program.commands) if (c.name() === "skills") grouped(c, GROUP.memory);
 
 grouped(program.command("init"), GROUP.setup)
@@ -1029,9 +1023,9 @@ program
   .command("keep", { hidden: true })
   .description("keep learnings `trail init` found: trail keep 1 3, or trail keep none")
   .argument("<numbers...>", "the numbers from the list init printed, or none")
-  .action((numbers: string[]) => {
+  .action(async (numbers: string[]) => {
     // The CLI half of the keep check (src/init/keep.ts): it needs the receipt the PreToolUse half wrote.
-    const r = keepCommand(numbers, process.env);
+    const r = (await import("./init/keep.js")).keepCommand(numbers, process.env);
     for (const line of r.lines) console.error(line);
     if (r.code) process.exitCode = r.code;
   });
@@ -1220,6 +1214,7 @@ const AGENT_ALIASES: Record<string, string> = { codex: "agents", opencode: "agen
 
 /** `graft init`. */
 async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: string[]; laptop: string[] } | null> {
+    await loadWiring();
     if (opts.listAgents) {
       for (const id of [...hostIds(), "claude"]) console.log(id);
       return null;
@@ -1258,7 +1253,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     // guessing (pre-0.8 this silently wired every agent the machine had ever
     // installed — see --yes to get that back).
     const home = userHome();
-    const plan = planInit(repo, { home });
+    const plan = wiring.planInit(repo, { home });
     const detectedIds = plan.filter((p) => p.detected).map((p) => p.id);
     const noAgents = (opts as { agents?: unknown }).agents === false;
 
@@ -1272,14 +1267,14 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     else if (noAgents) ids = ["claude"];
     else if (opts.yes || opts.dryRun) ids = detectedIds;
     else if (process.stdin.isTTY && process.stderr.isTTY) {
-      const picked = await runPicker(plan, repo, home);
+      const picked = await wiring.runPicker(plan, repo, home);
       if (picked === null) {
         console.error("· cancelled, nothing written");
         return null;
       }
       ids = picked.hosts;
     } else {
-      console.error(formatNonInteractiveHelp(detectedIds));
+      console.error(wiring.formatNonInteractiveHelp(detectedIds));
       return null;
     }
 
@@ -1297,9 +1292,9 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     if (opts.dryRun) {
       if (autoSel)
         console.error(`· --agents auto: repo files for Claude Code, Cursor, Codex and OpenCode; laptop settings for ${autoSel.agents.length ? agentList(autoSel.agents) : "none (no agent found here)"}\n`);
-      console.error(formatPlan(laptopOnly(plan, laptop), ids, repo, home));
+      console.error(wiring.formatPlan(laptopOnly(plan, laptop), ids, repo, home));
       for (const child of children)
-        console.error(`\n· ${child}/ (workspace child)\n` + formatPlan(laptopOnly(planInit(join(repo, child), { home }), laptop), ids, join(repo, child), home));
+        console.error(`\n· ${child}/ (workspace child)\n` + wiring.formatPlan(laptopOnly(wiring.planInit(join(repo, child), { home }), laptop), ids, join(repo, child), home));
       return null;
     }
     if (ids.length === 0) {
@@ -1311,7 +1306,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     const cliPath = fileURLToPath(import.meta.url);
 
     // D120 (2): what each checkout holds before init writes, so its install record names only init's own changes.
-    const installSnaps = TRAIL ? snapInit(targets, home) : [];
+    const installSnaps = TRAIL ? wiring.snapInit(targets, home) : [];
     // Under trail, each repo gets its `.trail/learnings/`, committed with the
     // code, and its folder in ~/.trail for personal learnings and corrections.
     // Before the look-back below sends its first event: that makes the repo one
@@ -1331,6 +1326,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     // up at the end. Nothing is kept without a tick (see src/init/review.ts).
     const tty = Boolean(process.stdin.isTTY && process.stderr.isTTY);
     // Past Claude sessions are on this laptop only where Claude Code is.
+    const { beginLookBack, finishLookBack } = await import("./init/run.js");
     const mineSessions = opts.mineSessions === true || opts.lookBack === true;
     const minePrs = opts.minePrs === true;
     const lookBack = TRAIL && wantClaude && (!laptop || laptop.includes("claude")) ? beginLookBack(repo, { plain: opts.plain === true, again: opts.lookBack === true, mineSessions, minePrs }) : null;
@@ -1357,7 +1353,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     // the workspace build, so it covers every child.
     let graphLine: string | null = null;
     if (!verbose) {
-      const res = await buildGraphWithProgress(repo, { build: opts.build, cliPath });
+      const res = await wiring.buildGraphWithProgress(repo, { build: opts.build, cliPath });
       for (const m of res.messages) console.error(m);
       const existing = res.built ? null : loadGraphCached(contextDirFor(repo, children.length ? undefined : program.opts<GlobalOpts>().dir));
       const fmt = (x: number) => x.toLocaleString("en-US");
@@ -1377,7 +1373,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     }
     // After the graph build too: it adds the map's ignore lines (`.trail/.gitignore` under trail, `.gitignore` and `.ignore`
     // under graft), and those are init's writes.
-    recordInit(installSnaps);
+    wiring.recordInit(installSnaps);
 
     if (!verbose) {
       // Warnings and removals in full, whatever else is folded.
@@ -1391,7 +1387,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
       else {
         const width = Math.max(...ids.map((id) => id.length));
         for (const id of ids) {
-          const summary = compactWrites(writesFor(id), repo, home);
+          const summary = wiring.compactWrites(writesFor(id), repo, home);
           console.error(`✓ ${id.padEnd(width)}   ${summary}`.trimEnd());
         }
       }
@@ -1446,7 +1442,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     if (!verbose) {
       // What there is to commit: the top-level entries the picked agents wrote.
       const tops: string[] = [];
-      for (const w of selectedWrites(plan, ids)) {
+      for (const w of wiring.selectedWrites(plan, ids)) {
         if (w.scope !== "repo") continue;
         const rel = shown(repo, w.path);
         // trail's Claude Code setup shares one file in .claude/; the rest there is personal.
@@ -1499,7 +1495,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
 }
 
 /** A plan with the out-of-repo writes only for `laptop`'s hosts; the plan itself when every host may write there. */
-function laptopOnly(plan: ReturnType<typeof planInit>, laptop: string[] | undefined): ReturnType<typeof planInit> {
+function laptopOnly(plan: ReturnType<typeof PlanInit>, laptop: string[] | undefined): ReturnType<typeof PlanInit> {
   if (!laptop) return plan;
   return plan.map((p) => (laptop.includes(p.id) ? p : { ...p, writes: p.writes.filter((w) => w.scope === "repo") }));
 }
@@ -1519,7 +1515,7 @@ function wireTarget(
   ctx: {
     home: string;
     cliPath: string;
-    plan: ReturnType<typeof planInit>;
+    plan: ReturnType<typeof PlanInit>;
     wantClaude: boolean;
     opts: { build?: boolean; mcp?: boolean; hooks?: boolean; global?: boolean; statusline?: boolean; userSkill?: boolean };
     /** Collect warnings and removals instead of printing a line per file, and
@@ -1546,8 +1542,8 @@ function wireTarget(
     // `reconcileWiring` then keeps them *up to date*, which is worse than stale.
     // Retract every host NOT being written now; `exclude` spares the ones about to
     // be rewritten, and the graph cache is kept (init is one step from using it).
-    const retracted = changed(
-      runRetract(repo, { home, apply: true, global: opts.global, cache: false, exclude: ids }),
+    const retracted = wiring.changed(
+      wiring.runRetract(repo, { home, apply: true, global: opts.global, cache: false, exclude: ids }),
     ).filter((r) => r.action !== "skipped-unparseable");
     for (const r of retracted) say(`- removed ${r.path} (${r.what}): agent not selected`);
     report.retracted = [...new Set(retracted.map((r) => r.hostId))];
@@ -1557,7 +1553,7 @@ function wireTarget(
       // writes under `~/.claude` now (hosts/claude-global.ts), so --no-global has to
       // reach it or the flag would silently mean "no out-of-repo writes, except three".
       const claudeGlobal = opts.global !== false && (!ctx.laptop || ctx.laptop.includes("claude"));
-      const res = runInit(repo, { build: opts.build, cliPath, statusline: wantStatusline, hooks: opts.hooks, userSkill: opts.userSkill, global: claudeGlobal, home, brand: brand() });
+      const res = wiring.runInit(repo, { build: opts.build, cliPath, statusline: wantStatusline, hooks: opts.hooks, userSkill: opts.userSkill, global: claudeGlobal, home, brand: brand() });
       say(`✓ wrote ${res.settingsPath}`);
       for (const s of res.shims) say(`✓ wrote ${s}`);
       if (res.skill) say(`✓ wrote ${res.skill}`);
@@ -1578,7 +1574,7 @@ function wireTarget(
     // list — never by its own detection fallback.
     const others = ids.filter((id) => id !== "claude");
     if (others.length > 0) {
-      const r = runHostsInit(repo, {
+      const r = wiring.runHostsInit(repo, {
         agents: others,
         home,
         mcp: opts.mcp,
@@ -1597,7 +1593,7 @@ function wireTarget(
         if (trust) say(`⚠ ${trust}`);
       }
       // Only worth saying when there was actually something out-of-repo to skip.
-      if (opts.global === false && selectedWrites(plan, ids).some((w) => w.scope === "global"))
+      if (opts.global === false && wiring.selectedWrites(plan, ids).some((w) => w.scope === "global"))
         say("· skipped out-of-repo writes (--no-global)");
     }
 
@@ -1619,7 +1615,7 @@ function wireTarget(
     if (!wantClaude) {
       if (!quiet)
         say(
-          buildGraphIfMissing(repo, { build: opts.build, cliPath })
+          wiring.buildGraphIfMissing(repo, { build: opts.build, cliPath })
             ? `✓ built the graph (${cmd("graft build")})`
             : "· skipped graph build",
         );
@@ -1629,7 +1625,7 @@ function wireTarget(
 
 /** Group a retraction report by host, so the output reads as "what leaves each agent". */
 function formatRetractions(rs: Retraction[], apply: boolean): string {
-  const hit = changed(rs);
+  const hit = wiring.changed(rs);
   if (hit.length === 0) return "· nothing to remove: no graft wiring found here";
   const verb = apply ? "removed" : "would remove";
   const lines: string[] = [];
@@ -1667,21 +1663,22 @@ grouped(program.command("uninstall"), GROUP.setup)
   .option("-y, --yes", "actually remove (without this, prints what it would remove and exits)")
   .option("--keep-cache", "keep graft/ and the .gitignore entries: wiring only")
   .option("--no-global", "leave out-of-repo files alone (~/.codex, ~/.gemini)")
-  .action((dir: string, opts: { yes?: boolean; keepCache?: boolean; global?: boolean }) => {
+  .action(async (dir: string, opts: { yes?: boolean; keepCache?: boolean; global?: boolean }) => {
+    await loadWiring();
     const repo = resolve(dir);
     const home = userHome();
     const common = { home, global: opts.global, cache: opts.keepCache ? false : true };
 
     if (!opts.yes) {
-      console.error(formatRetractions(planRetract(repo, common), false));
+      console.error(formatRetractions(wiring.planRetract(repo, common), false));
       console.error("\nDry run: nothing was touched. Re-run with -y to remove.");
       if (opts.global !== false)
         console.error("Entries marked [machine-wide] affect every project; --no-global skips them.");
       return;
     }
-    const done = runRetract(repo, { ...common, apply: true });
+    const done = wiring.runRetract(repo, { ...common, apply: true });
     console.error(formatRetractions(done, true));
-    const bad = changed(done).filter((r) => r.action === "skipped-unparseable");
+    const bad = wiring.changed(done).filter((r) => r.action === "skipped-unparseable");
     console.error(
       bad.length
         ? `\n⚠ ${bad.length} file(s) could not be parsed and were left as-is: see above.`
@@ -1832,7 +1829,7 @@ async function runTeamCheck(dir: string, opts: { base?: string; json?: boolean }
   if (d.truncated) console.error("⚠ the diff is over 400 KB; only the first 400 KB is checked");
   // Replaced and retired learnings are left out after the swap, so a branch can't retire a learning by editing it.
   const notes = withBaseLearnings(listNotes(repo), atBase);
-  const r = checkLocally({ diff: withoutTrailFiles(d.diff), files, notes, skills: listSkills(repo), asker: me, committed: committedAtBase(repo, d.from) });
+  const r = checkLocally({ diff: withoutTrailFiles(d.diff), files, notes, skills: (await import("./skills/skills.js")).listSkills(repo), asker: me, committed: committedAtBase(repo, d.from) });
   r.findings.unshift(...edits);
   const overlaps = overlapsWith(repo, files, me).slice(0, 3);
   if (opts.json) {

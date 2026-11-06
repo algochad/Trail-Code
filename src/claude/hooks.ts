@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { join, basename, isAbsolute, relative, resolve } from 'node:path';
 import { readWiring } from './stats.js';
 import { formatBlastRadius, formatOrientation, notesOnTouch, standingDirective, teamNotesDirective, type Touch } from './format.js';
@@ -8,17 +8,17 @@ import { liveLearnings } from '../notes/learning-fields.js';
 import { noteAuthor, teammatesOn } from '../notes/git-facts.js';
 import { indexFreshness, staleBanner } from '../context/check.js';
 import { dropStoredPrompts, patchStats, readSession, writeSession, resolveContextDir } from './state.js';
-import { emit, emitHook, graftJson, payloadSessionId, withContextDirArg } from './hook-io.js';
+import { emit, emitHook, payloadSessionId } from './hook-io.js';
+import { claudeDistDir } from './paths.js';
 import { codexPostBashPart, postBashPart, sessionStartPart } from './skills-wiring.js';
 import { handlePrompt } from './prompt-hook.js';
 import { runUpkeep } from '../upkeep-run.js';
 import { runningVersion, wiredHostIds } from '../upkeep.js';
-import { hostsWiredForTrail } from '../hosts/registry.js';
 import { handleStopEvent } from './stop.js';
 import { main as preBashMain } from './pre-bash.js';
 import { classifyToolUse, commandInvokesGraft, isMcpToolName, isGraftMcpTool, parseSavings, recordToolUse, type ToolKind } from './session-metrics.js';
-import { adoptRepoBrand, brand, tag, trailHandoverLine } from '../brand.js';
-import { globalCopyCovers } from './hook-layers.js';
+import { brand, tag, trailHandoverLine } from '../brand.js';
+import { adoptBrand, beginHook } from './hook-prelude.js';
 import { keepsNotes, noteCounts, repoPlace, type NoteCounts } from '../notes/home.js';
 import { branchesStale, overlapMark, readBranchCache, refreshBranches, SESSION_REFRESH_MS } from '../notes/branches.js';
 import { cacheDir, readJson, writeJsonAtomic } from '../util/state.js';
@@ -30,32 +30,23 @@ import type { Note } from '../notes/notes.js';
 import { hostFacts } from '../skills/host-facts.js';
 import { trailNow } from '../skills/settings.js';
 import { keptContext, keptNotice } from './start-init.js';
-import { userHome } from "../util/home.js";
 
 export { lastFileScopeHint, promptAskTimeout } from './prompt-hook.js';
 
-function readStdin(): any {
-  const seam = process.env.GRAFT_TEST_STDIN;
-  const raw = seam !== undefined ? seam : safeReadFd0();
-  try {
-    const input = JSON.parse(raw);
-    return input && typeof input === 'object' && !Array.isArray(input) ? input : {};
-  } catch { return {}; }
-}
-function safeReadFd0(): string { try { return readFileSync(0, 'utf8'); } catch { return ''; } }
-
-function projectDir(input: any): string {
-  return process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
-}
 export function underGraft(dir: string, file: string): boolean {
   const rel = file.startsWith(dir) ? file.slice(dir.length) : file;
   const posix = rel.replace(/^[/\\]+/, '').replace(/\\/g, '/');
   return posix.startsWith('graft/') || posix.startsWith('.trail/cache/');
 }
-function checkStaleCount(dir: string): number {
-  const r = graftJson(dir, withContextDirArg(dir, ['check', '.', '--json']));
-  const g = r?.graph ?? {};
-  return (g.changed?.length ?? 0) + (g.added?.length ?? 0) + (g.removed?.length ?? 0);
+/**
+ * The stale count comes later: `graft check` re-reads every file, so it runs in a detached child (claude/stale-run.ts)
+ * that writes it into the stats if the edit is still unsynced. GRAFT_TEST_STALE_RUN points a test at a stand-in.
+ */
+function startStaleCount(dir: string): void {
+  try {
+    const run = process.env.GRAFT_TEST_STALE_RUN ?? join(claudeDistDir(), 'stale-run.js');
+    spawn(process.execPath, [run, dir], { cwd: dir, detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  } catch { /* no count this time: the rebuild after the turn sets the real one */ }
 }
 /**
  * The absolute path of the file a PostToolUse edit touched, across host edit-tool
@@ -83,7 +74,8 @@ export function editedFilePath(input: any, dir: string): string | null {
 async function handlePostEdit(input: any, dir: string): Promise<void> {
   const file = editedFilePath(input, dir);
   if (!file || underGraft(dir, file)) return;
-  patchStats(dir, { dirty: true, staleCount: checkStaleCount(dir), lastFile: basename(file) });
+  patchStats(dir, { dirty: true, lastFile: basename(file) });
+  startStaleCount(dir);
   const out: string[] = [];
   const w = readWiring(dir);
   if (w) { const br = formatBlastRadius(w, file); if (br) out.push(br); }
@@ -412,19 +404,16 @@ export async function main(event: string): Promise<void> {
   // Shims before pre-bash.js existed send PreToolUse here: hand it straight
   // over, before any of the work the other events share.
   if (event === 'pre-bash') { await preBashMain(event); return; }
-  // trail's own headless Claude calls (the first-run read of past sessions) run with this set.
-  if (process.env.TRAIL_NO_HOOKS === '1') return;
-  const input = readStdin();
-  // Registered in the repo and in ~/.claude, Claude Code runs both: one answers.
-  // Who sent the payload decides first: Copilot CLI runs only the repo's copy.
-  if (globalCopyCovers(event, process.argv[1], userHome(), process.env, input)) return;
-  const dir = projectDir(input);
+  // Quiet for trail's own headless calls, and when the ~/.claude copy answers (hook-prelude.ts).
+  const begun = beginHook(event);
+  if (!begun) return;
+  const { input, dir } = begun;
   // A failed Bash call (PostToolUseFailure, D34): the skills mark, and 1b's wall fix as its one answer, before any of
   // the work the other events share.
   if (event === 'post-bash-fail') { emitHook('PostToolUseFailure', await postBashPart(input, dir, true)); return; }
   // Codex's PostToolUse on Bash, on every exit (3.4): the skills mark, and the wall fix where its context reaches the model.
   if (event === 'codex-post-bash') { emitHook('PostToolUse', await codexPostBashPart(input, dir)); return; }
-  adoptRepoBrand(dir, process.env, hostsWiredForTrail);
+  adoptBrand(dir);
 
   if (event === 'session-start') {
     // The skills part first, so nothing below can skip it (a repo with no graft/INDEX.md included).

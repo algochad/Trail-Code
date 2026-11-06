@@ -181,7 +181,7 @@ test("guard-fast.ts is fast-path safe: no static node:fs, only node:path and nod
   const names = [...seen].map((f) => relative(SRC, f).split("\\").join("/")).sort();
   assert.deepEqual([...pkgs].sort(), ["node:os", "node:path"].filter((p) => pkgs.has(p)));
   assert.ok(!pkgs.has("node:fs"));
-  for (const n of names) assert.ok(["trace/guard-fast.ts", "trace/gate-file.ts", "trace/shell.ts", "trace/shell-words.ts", "trace/shell-scan.ts"].includes(n), n);
+  for (const n of names) assert.ok(["trace/guard-fast.ts", "trace/gate-file.ts", "trace/shell.ts", "trace/shell-words.ts", "trace/shell-scan.ts", "util/home.ts"].includes(n), n);
 });
 
 test("a guard call takes under 2 ms (best of 200, file kept, no timeout anywhere on PATH)", () => {

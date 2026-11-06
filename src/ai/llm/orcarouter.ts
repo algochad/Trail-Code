@@ -8,8 +8,8 @@
  * reaching 150+ models from OpenAI, Anthropic, Google, DeepSeek, Qwen, and more
  * through one endpoint without a per-vendor code path.
  */
-import OpenAI from "openai";
-import { OpenAIChatModel, type OpenAIChatModelOptions } from "./openai.js";
+import type OpenAI from "openai";
+import { loadOpenAI, OpenAIChatModel, type OpenAIChatModelOptions } from "./openai.js";
 import { transportRetries } from "./types.js";
 
 /** Public endpoint of the OrcaRouter AI gateway. */
@@ -44,7 +44,7 @@ export async function listOrcaRouterModels(opts: {
 }): Promise<string[]> {
   const client =
     opts.client ??
-    new OpenAI({
+    new (await loadOpenAI())({
       apiKey: opts.apiKey,
       baseURL: opts.baseUrl ?? DEFAULT_ORCAROUTER_BASE_URL,
       maxRetries: transportRetries(),

@@ -140,9 +140,9 @@ test('the PreToolUse module loads only node builtins and small files, never the 
   const names = files.map((f) => relative(SRC, f).split('\\').join('/'));
   for (const heavy of ['cli.ts', 'claude/hooks.ts', 'upkeep.ts', 'upkeep-run.ts']) assert.ok(!names.includes(heavy), `${heavy} stays out`);
   assert.ok(!names.some((n) => /^(telemetry|graph|ask|notes|cloud)\//.test(n)), `nothing heavier: ${names.join(', ')}`);
-  // Itself, the one-copy check (hook-layers, brand, host), the skills fast path below, and the
+  // Itself, the one-copy check (hook-layers, brand, host), the home helper (util/home.ts), the skills fast path below, and the
   // commit check (pre-bash-check.ts), loaded only before a commit, a push or a PR.
-  assert.ok(files.length <= 13, `a small closure: ${names.join(', ')}`);
+  assert.ok(files.length <= 14, `a small closure: ${names.join(', ')}`);
   // Loading it costs nothing but itself: no other file, and no ESM import of
   // node:fs, which alone costs Node several ms before every shell command.
   const atLoad = importClosure(join(SRC, 'claude', 'pre-bash.ts'), true);
@@ -150,12 +150,12 @@ test('the PreToolUse module loads only node builtins and small files, never the 
   assert.deepEqual(atLoad.packages, []);
 });
 
-test('the skills fast path (pre-bash-skills.ts, up to the save gate) is at most 9 small files that load only node:path and node:os', () => {
+test('the skills fast path (pre-bash-skills.ts, up to the save gate) is at most 10 small files that load only node:path and node:os', () => {
   const { files, packages } = importClosure(join(SRC, 'claude', 'pre-bash-skills.ts'), false, [SAVE_GATE]);
   const names = files.map((f) => relative(SRC, f).split('\\').join('/'));
   // 1b (R20): the ninth is trace/guard-fast.ts, the sure-fail guardrail (4.11); it imports only files already on the path.
   assert.ok(names.includes('trace/guard-fast.ts'), names.join(', '));
-  assert.ok(files.length <= 9, `at most 9: ${names.join(', ')}`);
+  assert.ok(files.length <= 10, `at most 10 (the home helper, util/home.ts, is one): ${names.join(', ')}`);
   assert.ok(!names.some((n) => /^(telemetry|graph|ask|notes|cloud)\//.test(n) || n === 'cli.ts'), `nothing heavier: ${names.join(', ')}`);
   assert.deepEqual(packages.filter((p) => p !== 'node:path' && p !== 'node:os'), [], `builtins only, and never node:fs: ${packages.join(', ')}`);
   // No file on it reaches for the session state, compile or the store at load.
