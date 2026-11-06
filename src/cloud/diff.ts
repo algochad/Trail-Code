@@ -3,7 +3,7 @@
  * pull request, committed or not, measured from where it left its base.
  */
 import { execFileSync } from "node:child_process";
-import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
+import { plainGit } from "../util/git-args.js";
 
 function git(repo: string, args: string[]): string | null {
   try {

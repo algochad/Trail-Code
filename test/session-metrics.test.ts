@@ -135,15 +135,6 @@ test('recordToolUse can log savings on a graft read with no explicit kind classi
   assert.equal(readSession(d, 's1').graftReads, 1);
 });
 
-test('recordToolUse stamps the host once — the first tool use owns the attribution', () => {
-  const d = fresh();
-  recordToolUse(d, 's1', { kind: 'graft', host: 'cursor' });
-  assert.equal(readSession(d, 's1').host, 'cursor');
-  // a later use from a different host must not overwrite the stamp
-  recordToolUse(d, 's1', { kind: 'source', host: 'claude-code' });
-  assert.equal(readSession(d, 's1').host, 'cursor', 'host is not re-stamped');
-});
-
 // ── latestSession + formatSessionStats (what `graft stats` reads) ──────────
 
 function writeSession(d: string, id: string, body: object, ageMs = 0): void {

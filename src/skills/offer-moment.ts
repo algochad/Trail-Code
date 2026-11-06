@@ -79,10 +79,10 @@ export interface Captured {
   out: HookOut | null;
   /** Going on: context to add first (the agent said the offer and the person moved on). */
   extra?: string;
-  /** For telemetry `skill_answer`: the class, or why the offer was dropped unanswered; null with no offer, or for a
+  /** The class, or why the offer was dropped unanswered; null with no offer, or for a
    *  second yes after the first (ignored, D70: nothing to send). */
   answer: TypedAnswer | 'stale' | 'not-shown' | null;
-  /** Phase 2 (4.9): the prompt hook retired the skill on this answer (for telemetry `skill_changed{retire}`). */
+  /** Phase 2 (4.9): the prompt hook retired the skill on this answer. */
   changed?: 'retire';
 }
 

@@ -34,8 +34,8 @@ export const SOURCES: readonly LearningSource[] = ["person", "init-typed", "init
 export const CHECKS: readonly LearningCheck[] = ["no-timeout"];
 export const ENFORCES: readonly LearningEnforce[] = ["sure-fail"];
 /**
- * The wall catalog's classes at run time, in the catalog's order (trace/walls.ts). Equal to the WallClass type and
- * to telemetry's wall_hit.class values; a test holds all three equal.
+ * The wall catalog's classes at run time, in the catalog's order (trace/walls.ts). Equal to the WallClass type;
+ * a test holds them equal.
  */
 export const WALL_CLASSES: readonly WallClass[] = [
   "timeout-missing", "zsh-no-match", "git-https-auth", "docker-rootless", "npm-e401-eotp", "claude-not-logged-in", "enospc",

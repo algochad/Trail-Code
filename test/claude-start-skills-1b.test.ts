@@ -23,23 +23,10 @@ const made: Box[] = [];
 const box = (tag: string) => { const b = makeBox(tag); made.push(b); return b; };
 after(() => { for (const b of made) rmSync(b.home, { recursive: true, force: true }); });
 import { createHash } from 'node:crypto';
-import { allowedValue, EVENTS } from '../src/telemetry/contract.js';
 
 const start = (b: Box, source: string, env = b.env, extra: Record<string, unknown> = {}) =>
   sessionStartSkillsRun(startPayload(b, source, extra), CWD, env, { gate: gateFor(b) });
 const SH = createHash('sha256').update(SID).digest('hex').slice(0, 12);
-
-/** Telemetry carries only the contract's keys and values (counts only, R16). */
-function contractOnly(sent: Array<[string, Record<string, string>]>): void {
-  for (const [event, props] of sent) {
-    const keys = EVENTS[event];
-    assert.ok(keys, `not a contract event: ${event}`);
-    for (const [k, v] of Object.entries(props)) {
-      assert.ok(keys.has(k), `${event}.${k} is not in the contract`);
-      assert.ok(allowedValue(event, k, String(v)), `${event}.${k}=${v} is not a contract value`);
-    }
-  }
-}
 
 test('J14b: a skill whose branch is gone on a fetched remote reads (may be out of date) in the index, and skill_stale{missing} goes once a day', () => {
   const b = box('s1b-gone');
@@ -52,7 +39,6 @@ test('J14b: a skill whose branch is gone on a fetched remote reads (may be out o
   const r = start(b, 'startup');
   assert.match(r.out.context ?? '', /ship-beta-then-prod \([^)]*\)[^·]*\(may be out of date\)/);
   assert.deepEqual(r.sent, [['skill_stale', { reason: 'missing' }]]);
-  contractOnly(r.sent as Array<[string, Record<string, string>]>);
   assert.deepEqual(start(b, 'startup').sent, [], 'once a day');
 });
 
@@ -64,7 +50,6 @@ test('J14e: a skill unused for 60 days leaves the index (its cue still fires), a
   const r = start(b, 'startup', later);
   assert.doesNotMatch(r.out.context ?? '', /Trail skills here/);
   assert.deepEqual(r.sent, [['skill_stale', { reason: 'unused' }]]);
-  contractOnly(r.sent as Array<[string, Record<string, string>]>);
   assert.deepEqual(start(b, 'startup', later).sent, [], 'said once');
 });
 

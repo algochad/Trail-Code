@@ -25,7 +25,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import type { BlastReport } from "./blast.js";
-import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
+import { plainGit } from "../util/git-args.js";
 
 /** One person's claim on one area. */
 export interface Owner {

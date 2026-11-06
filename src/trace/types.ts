@@ -316,7 +316,7 @@ export interface SkillSessionState {
 /* absent one reads as null (or 0, {}).                                        */
 /* -------------------------------------------------------------------------- */
 
-/** The wall catalog's classes (spec 12). Closed: equal to telemetry's wall_hit.class values, in the catalog's order. */
+/** The wall catalog's classes (spec 12). Closed: the catalog's order. */
 export type WallClass =
   | 'timeout-missing' | 'zsh-no-match' | 'git-https-auth' | 'docker-rootless'
   | 'npm-e401-eotp' | 'claude-not-logged-in' | 'enospc';

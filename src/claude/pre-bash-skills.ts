@@ -20,7 +20,7 @@
  *  2b. 1b's sure-fail guardrail (4.11, recall half, subagents too): a
  *     `timeout N` command on a machine with no `timeout`, when the person
  *     kept the no-timeout guardrail, is denied and the deny marked for Stop's
- *     count (no telemetry module on this path). Nothing else runs for it.
+ *     count. Nothing else runs for it.
  *  3. `skills add` or `skills lesson`: the save gate decides (a deny, or a
  *     receipt and null); the lesson gate loads only for a lesson command.
  *  4. A step of a live run block that can't be undone: Claude Code asks the

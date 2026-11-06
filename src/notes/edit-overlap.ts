@@ -17,7 +17,7 @@ import { extractGeneric } from "../graph/generic.js";
 import type { NodeV1 } from "../graph/types.js";
 import { readBranchCache, safeRef, type BranchCache } from "./branches.js";
 import { flatLine } from "./flatten.js";
-import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
+import { plainGit } from "../util/git-args.js";
 
 export interface Lines {
   start: number;

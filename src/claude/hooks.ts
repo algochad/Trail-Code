@@ -16,8 +16,6 @@ import { handlePrompt } from './prompt-hook.js';
 import { runUpkeep } from '../upkeep-run.js';
 import { runningVersion, wiredHostIds } from '../upkeep.js';
 import { hostsWiredForTrail } from '../hosts/registry.js';
-import { flushClosedSessions, summarizeSession } from '../telemetry/sessions.js';
-import { maybeFlushInBackground } from '../telemetry/flush.js';
 import { handleStopEvent } from './stop.js';
 import { main as preBashMain } from './pre-bash.js';
 import { classifyToolUse, commandInvokesGraft, isMcpToolName, isGraftMcpTool, parseSavings, recordToolUse, type ToolKind } from './session-metrics.js';
@@ -26,14 +24,11 @@ import { fitTrailServerToMachine } from '../hosts/claude-global.js';
 import { globalCopyCovers } from './hook-layers.js';
 import { keepsNotes, noteCounts, repoPlace, type NoteCounts } from '../notes/home.js';
 import { branchesStale, overlapMark, readBranchCache, refreshBranches, SESSION_REFRESH_MS } from '../notes/branches.js';
-import { learningFiles } from '../notes/repo-trail.js';
-import { inWorkspace, maybeSyncInBackground } from '../cloud/workspace-sync.js';
+import { maybeSyncInBackground } from '../cloud/workspace-sync.js';
 import { hookNotice } from '../cloud/nudge.js';
 import { cacheDir, readJson, writeJsonAtomic } from '../util/state.js';
-import { countBucket, type AgentHost } from '../telemetry/contract.js';
 import { detectHost } from '../trace/host.js';
 import type { HookOut } from '../skills/types.js';
-import { track } from '../telemetry/track.js';
 import { skillsDirective } from '../skills/skills.js';
 import { everyRepoLearnings } from '../notes/every-repo.js';
 import type { Note } from '../notes/notes.js';
@@ -143,8 +138,7 @@ async function editOverlap(input: any, dir: string, file: string): Promise<strin
  *
  *   1. Score the usage mix: classify the tool as a graft retrieval or a source
  *      read (Read/Grep/Glob) and bump the session's `graftReads`/`sourceReads`.
- *      Until this ran, those counters were never incremented, so
- *      `session_summary` telemetry shipped 0/0 for every session.
+ *      Until this ran, those counters were never incremented.
  *   2. Sum any `[graft] tokens saved ≈ N` footers in the output into the running
  *      `savedTokens` total, so the statusline's `~N tok saved` reflects the
  *      session across CLI and MCP.
@@ -158,7 +152,7 @@ async function editOverlap(input: any, dir: string, file: string): Promise<strin
  */
 function handleToolUse(input: any, dir: string): void {
   recordToolUse(dir, payloadSessionId(input),
-    { ...classifyAndScore(input?.tool_name, input?.tool_input?.command, () => input?.tool_response ?? input), host: telemetryHost(input) });
+    { ...classifyAndScore(input?.tool_name, input?.tool_input?.command, () => input?.tool_response ?? input) });
 }
 
 /**
@@ -218,12 +212,6 @@ export function withTouchLearnings(out: HookOut, input: any, dir: string): HookO
   return { ...out, context: [out.context, learned].filter(Boolean).join('\n\n') };
 }
 
-/** Who to put a tool use down to: Cursor and Copilot CLI run these hooks too. */
-function telemetryHost(input: unknown): AgentHost {
-  const host = detectHost(input).host;
-  return host === 'cursor' || host === 'copilot' ? host : 'claude-code';
-}
-
 /**
  * Classify a tool use and, only when it could carry a graft footer, parse the
  * savings out of its (lazily-serialised) output.
@@ -262,7 +250,7 @@ function handleCursorPostTool(input: any, dir: string): void {
   if (isMcpToolName(toolName) || isGraftMcpTool(toolName)) return; // handled by handleCursorMcp
   const command = input?.tool_input?.command ?? input?.tool_input?.cmd;
   recordToolUse(dir, cursorSessionId(input),
-    { ...classifyAndScore(toolName, command, () => input?.tool_output ?? input?.tool_response ?? input), host: 'cursor' });
+    { ...classifyAndScore(toolName, command, () => input?.tool_output ?? input?.tool_response ?? input) });
 }
 
 /**
@@ -274,7 +262,7 @@ function handleCursorMcp(input: any, dir: string): void {
   const toolName = String(input?.tool_name ?? '');
   if (!isGraftMcpTool(toolName)) return;
   const savedTokens = parseSavings(JSON.stringify(input?.result_json ?? input?.result ?? input ?? ''));
-  recordToolUse(dir, cursorSessionId(input), { kind: 'graft', savedTokens, host: 'cursor' });
+  recordToolUse(dir, cursorSessionId(input), { kind: 'graft', savedTokens });
 }
 
 /** Cursor keys a chat by `conversation_id` (its `session_id` equivalent). */
@@ -283,59 +271,6 @@ function cursorSessionId(input: any): string {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Once a day per repo, the `repo_seen` event: whether `.trail/` is committed
- * here, how many learnings it holds, and whether this machine shares the repo
- * with a workspace. Queued only, like every hook's telemetry.
- */
-export function trackRepoSeen(dir: string, now = Date.now()): void {
-  try {
-    const place = repoPlace(dir);
-    if (!place.git) return;
-    const mark = join(cacheDir(place.checkout), 'trail-repo-seen.json');
-    if (now - (readJson<{ at?: number }>(mark)?.at ?? 0) < DAY_MS) return;
-    writeJsonAtomic(mark, { at: now }, true);
-    const tracked = execFileSync('git', ['ls-files', '--', '.trail'], { cwd: place.checkout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, windowsHide: true });
-    track(
-      'repo_seen',
-      { trail_committed: String(tracked.trim().length > 0), learnings_bucket: countBucket(learningFiles(place.checkout).length), workspace: String(inWorkspace(place.checkout)) },
-      { repo: place.checkout },
-    );
-  } catch {
-    // A missed sighting undercounts one repo for one day.
-  }
-}
-
-/**
- * When the learnings committed on this checkout's HEAD went up since the last
- * session here: how many came in and how many there are, as buckets. A repo
- * with committed learnings is where trail starts paying off, so this is the
- * activation count. `first_look` marks the first time this clone is seen, so
- * a clone of a repo that already had them isn't counted as new ones.
- */
-export function trackLearningsCommitted(dir: string): void {
-  try {
-    const place = repoPlace(dir);
-    if (!place.git) return;
-    const listed = execFileSync('git', ['ls-tree', '-r', '--name-only', 'HEAD', '--', '.trail/learnings'], {
-      cwd: place.checkout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, windowsHide: true,
-    });
-    const count = listed.split('\n').filter((f) => f.endsWith('.md')).length;
-    const mark = join(cacheDir(place.checkout), 'trail-learnings-committed.json');
-    const before = readJson<{ count?: number }>(mark)?.count;
-    if (before === count) return;
-    writeJsonAtomic(mark, { count }, true);
-    if (count <= (before ?? 0)) return;
-    track(
-      'learnings_committed',
-      { added_bucket: countBucket(count - (before ?? 0)), total_bucket: countBucket(count), first_look: String(before === undefined) },
-      { repo: place.checkout },
-    );
-  } catch {
-    // Not a repo with a HEAD yet, or git is slow: counted next session.
-  }
-}
 
 /**
  * Learnings added to this repo but sitting uncommitted in `.trail/learnings/` (from trail init's
@@ -409,8 +344,6 @@ function trailAtStart(dir: string): void {
     // Without it, the first prompt sees what the last refresh saw.
   }
   maybeSyncInBackground(dir);
-  trackRepoSeen(dir);
-  trackLearningsCommitted(dir);
 }
 
 /** What the session-start text says about learnings, read once. */
@@ -520,16 +453,11 @@ export async function main(event: string): Promise<void> {
     // an older graft, and pick up any cached "newer version on npm" answer.
     // background:false — the registry check stays off the network here; the CLI
     // and the MCP server fill that cache, this only reads it.
-    const upkeep = runUpkeep(dir, runningVersion(), { background: false }).lines;
+    const upkeep = runUpkeep(dir, runningVersion()).lines;
     // On graft without trail, in a repo graft set up: once a week, the agent
     // tells the person how to get it.
     const handover = wiredHostIds(dir).includes('claude') ? trailHandoverLine() : null;
     if (handover) upkeep.push(handover);
-    // Roll up any session that ended since we were last here, then send the
-    // queue from a detached child: what session end didn't get to (a killed
-    // terminal never fires it) goes now. Once a day at most, never waited on.
-    flushClosedSessions(dir);
-    maybeFlushInBackground();
     // Someone who said yes to `share-session --sync`: send what changed, from a detached child.
     maybeShareSyncInBackground();
     // Once per repo: older versions kept the prompt in each session file.
@@ -549,8 +477,7 @@ export async function main(event: string): Promise<void> {
     return;
   }
 
-  // Claude closing: send the queue from a detached child, so quitting isn't slowed.
-  if (event === 'session-end') { maybeFlushInBackground(); return; }
+  if (event === 'session-end') return;
 
   if (event === 'pre-edit') { handlePreEdit(input, dir); return; }
 
@@ -569,11 +496,7 @@ export async function main(event: string): Promise<void> {
 
   if (event === 'cursor-mcp') { handleCursorMcp(input, dir); return; }
 
-  // Cursor closes a chat: force-close THIS conversation into a bucketed
-  // `session_summary` now (its file's mtime is fresh, so the idle sweep would
-  // skip it). Attributed to Cursor. The idle sweep stays on Claude's
-  // session-start, whose Stop fires per turn and so has no real end signal.
-  if (event === 'cursor-session-end') { summarizeSession(dir, cursorSessionId(input), { host: 'cursor' }); return; }
+  if (event === 'cursor-session-end') return;
 
   if (event === 'stop') { await handleStopEvent(input, dir); return; }
 

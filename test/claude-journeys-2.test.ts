@@ -2,7 +2,7 @@
  * Phase 2 through the real hooks (c8): every hook goes through `main(event)`
  * with Claude Code's payloads, the CLI steps are the CLI halves the agent's
  * shell runs. Moment 5 (update), the retire proposal and the weekly value
- * line, with the telemetry each journey queues, in order. Made-up acme/shop
+ * line. Made-up acme/shop
  * and acme-cli only.
  */
 import { test } from 'node:test';
@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import {
   agentRuns, at, box, done, one, promptHook, reply, session, startHook, stateOf, stopHook,
 } from './claude-skills-journey-fixtures.js';
-import { type Box, type Session, blockOf, cliUpd, ctxOf, envOf, kept, offerLinesIn, publishOf, release5, skillsEvents, TELEMETRY_ENV, updateCommandIn } from './claude-journeys-2-fixtures.js';
+import { type Box, type Session, blockOf, cliUpd, ctxOf, envOf, kept, offerLinesIn, publishOf, release5, updateCommandIn } from './claude-journeys-2-fixtures.js';
 import { listAllPersonal } from '../src/skills/store.js';
 import { getSkillState, updateSkillState } from '../src/skills/state.js';
 import { skillHash } from '../src/skills/skillmd.js';
@@ -20,7 +20,7 @@ import { listVersions } from '../src/skills/versions.js';
 import { readLedger } from '../src/skills/ledger.js';
 
 test('moment 5 (update): a checked release from the block that needed another publish gets the update offer at Stop; yes, then trail skills update writes v2', async () => {
-  const b = box('c8-m5', { env: TELEMETRY_ENV });
+  const b = box('c8-m5');
   try {
     const name = await kept(b, 20, '1.4.0');
     const s = session(b);
@@ -46,7 +46,6 @@ test('moment 5 (update): a checked release from the block that needed another pu
     assert.equal(getSkillState(ref.id, env)!.status, 'candidate');
     assert.ok(readLedger(ref.id, env).some((l) => l.event === 'changed' && l.op === 'update' && l.from === 1 && l.to === 2));
     // Telemetry in order: the save, its use, the offer, the yes.
-    assert.deepEqual(skillsEvents(b).filter((e) => !e.startsWith('skill_saved')), ['skill_used:checked', 'skill_offered:update', 'skill_answer:yes']);
   } finally {
     done(b);
   }
@@ -79,7 +78,7 @@ async function driftDay(b: Box): Promise<{ s: Session; block: string; lines: [st
 }
 
 test('J15 A: replace writes the steps that just worked as v2, a candidate again, v1 kept', async () => {
-  const b = box('c8-j15a', { env: TELEMETRY_ENV });
+  const b = box('c8-j15a');
   try {
     const { ref } = await needsFixSkill(b);
     const { s, lines } = await driftDay(b);
@@ -99,14 +98,13 @@ test('J15 A: replace writes the steps that just worked as v2, a candidate again,
     const st = getSkillState(ref.id, env)!;
     assert.equal(st.status, 'candidate', 'failures cleared');
     assert.equal(st.fixHash, undefined);
-    assert.deepEqual(skillsEvents(b).filter((e) => !e.startsWith('skill_saved')), ['skill_offered:drift', 'skill_answer:yes']);
   } finally {
     done(b);
   }
 });
 
 test('J15 B: retire moves the folder to .retired on the person\'s typed word, and the agent is told how to bring it back', async () => {
-  const b = box('c8-j15b', { env: TELEMETRY_ENV });
+  const b = box('c8-j15b');
   try {
     const { ref } = await needsFixSkill(b);
     const { s } = await driftDay(b);
@@ -114,7 +112,6 @@ test('J15 B: retire moves the folder to .retired on the person\'s typed word, an
     assert.match(said, /Trail retired release-npm\. Tell them in one line, with how to bring it back: trail skills restore release-npm\./, said);
     assert.equal(existsSync(ref.dir), false);
     assert.ok(existsSync(join(b.trail, 'skills', '.retired', 'release-npm-2026-10-27', 'SKILL.md')), 'moved, nothing deleted');
-    assert.deepEqual(skillsEvents(b).filter((e) => !e.startsWith('skill_saved')), ['skill_offered:drift', 'skill_answer:retire', 'skill_changed:retire']);
   } finally {
     done(b);
   }
@@ -138,7 +135,7 @@ test('J15 B: "retire" after a reply that didn\'t end with the offer\'s line 2 mo
 });
 
 test('J15 C: leave it keeps the skill needing a fix, and the drift offer never comes again for this version', async () => {
-  const b = box('c8-j15c', { env: TELEMETRY_ENV });
+  const b = box('c8-j15c');
   try {
     const { ref } = await needsFixSkill(b);
     const { s } = await driftDay(b);
@@ -148,14 +145,13 @@ test('J15 C: leave it keeps the skill needing a fix, and the drift offer never c
     await release5(s2, 29, '1.4.5', { skip: ['npm run lint'], publish: [{ cmd: 'npm publish ./dist/acme-cli-1.4.5.tgz --access public' }] });
     reply(s2, at(29, 40), 'Published 1.4.5: npm shows it.');
     assert.equal(blockOf(one(await stopHook(s2, at(29, 41), 'Published 1.4.5: npm shows it.'))), '', 'never asked again for v1');
-    assert.deepEqual(skillsEvents(b).filter((e) => !e.startsWith('skill_saved')), ['skill_offered:drift', 'skill_answer:no']);
   } finally {
     done(b);
   }
 });
 
 test('J15 D: a hand-edited skill gets only a proposal beside it, the diff and the cp line; the file and its status stay', async () => {
-  const b = box('c8-j15d', { env: TELEMETRY_ENV });
+  const b = box('c8-j15d');
   try {
     const { ref, mine } = await needsFixSkill(b, true);
     const { s, lines } = await driftDay(b);
@@ -175,7 +171,6 @@ test('J15 D: a hand-edited skill gets only a proposal beside it, the diff and th
     const st = getSkillState(ref.id, envOf(b, at(28, 1)))!;
     assert.equal(st.hash, skillHash(proposed), 'adopted');
     assert.equal(st.status, 'candidate');
-    assert.deepEqual(skillsEvents(b).filter((e) => !e.startsWith('skill_saved')), ['skill_offered:drift', 'skill_answer:yes', 'skill_changed:adopted']);
   } finally {
     done(b);
   }
@@ -184,7 +179,7 @@ test('J15 D: a hand-edited skill gets only a proposal beside it, the diff and th
 /* ---- the weekly value line (4.14, D134) ---- */
 
 test('the value line: two uses from the block and a known error with its fix, then the next startup says the week once', async () => {
-  const b = box('c8-value', { env: TELEMETRY_ENV });
+  const b = box('c8-value');
   try {
     const name = await kept(b, 20, '1.4.0');
     for (const [day, v] of [[21, '1.4.1'], [22, '1.4.2']] as const) {
@@ -209,14 +204,13 @@ test('the value line: two uses from the block and a known error with its fix, th
     const again = ctxOf(one(await startHook(session(b), at(23, 60))));
     assert.ok(!again.includes('Its weekly count'), 'once in 7 days');
     assert.ok(!ctxOf(one(await startHook(s, at(23, 90), 'compact'))).includes('Its weekly count'));
-    assert.deepEqual(skillsEvents(b).filter((e) => e.startsWith('skill_value')), ['skill_value:context']);
   } finally {
     done(b);
   }
 });
 
 test('D137 Claude Code in dontAsk: the publish is handed to the person; their next "publish" continues the run and the use counts step 5 as handed', async () => {
-  const b = box('c8-handed-claude', { env: TELEMETRY_ENV });
+  const b = box('c8-handed-claude');
   try {
     const name = await kept(b, 20, '1.4.0');
     const s = session(b, { mode: 'dontAsk' });
@@ -236,7 +230,6 @@ test('D137 Claude Code in dontAsk: the publish is handed to the person; their ne
     const u = readLedger(ref.id, envOf(b, at(22, 621))).filter((l) => l.event === 'use');
     assert.equal(u.length, 1, 'the first use reached the ledger');
     assert.deepEqual([u[0]!.stepsRan, (u[0] as any).handed, u[0]!.failedStep, u[0]!.check], [[1, 2, 3, 4, 5], [5], null, 'passed']);
-    assert.ok(skillsEvents(b).includes('skill_used:checked'), skillsEvents(b).join(' '));
   } finally {
     done(b);
   }

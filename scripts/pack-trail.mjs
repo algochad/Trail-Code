@@ -13,7 +13,7 @@
  * resolve `@nanonets/graft/dist/claude/*` by path, and 78% of active installs
  * are on versions older than the one that knows about trail.
  *
- * Usage, after `npm run build` (and the telemetry key stamp, when publishing):
+ * Usage, after `npm run build`:
  *   node scripts/pack-trail.mjs
  *   npm publish build/trail --access public
  */
@@ -38,7 +38,7 @@ const trail = {
   keywords: [...new Set(['trail', ...(pkg.keywords ?? [])])],
   bin: { trail: 'dist/bin/trail.js' },
   // Built already; nothing to compile in the published tree.
-  scripts: { postinstall: pkg.scripts.postinstall },
+  scripts: {},
 };
 delete trail.devDependencies;
 

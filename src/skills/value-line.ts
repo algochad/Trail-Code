@@ -341,7 +341,7 @@ export function startValue(ctx: StartValueCtx, env?: NodeJS.ProcessEnv, now: Dat
   }
 }
 
-/** Stop: the timeout guardrail's sure-fail denies this Stop counted (`guardrailCounts`' telemetry), for `noteValue`. The line names that guardrail, so no other class counts. */
+/** Stop: the timeout guardrail's sure-fail denies this Stop counted (`guardrailCounts`), for `noteValue`. The line names that guardrail, so no other class counts. */
 export function guardrailStopsIn(sent: ReadonlyArray<readonly [string, Record<string, string>]>): number {
   return sent.filter(([e, p]) => e === 'guardrail' && p?.class === 'no-timeout' && p?.outcome === 'sure-fail').length;
 }

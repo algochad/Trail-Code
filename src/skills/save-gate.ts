@@ -10,7 +10,7 @@
  * a different verdict) is held for the person to keep in their own
  * terminal, never saved. A held item never reaches the agent.
  *
- * Nothing here loads the CLI, the graph, ask, the cloud or telemetry: the
+ * Nothing here loads the CLI, the graph, ask, or the cloud: the
  * CLI half returns what was saved for `cli-skills.ts` to report.
  */
 import { createHash } from 'node:crypto';
@@ -237,7 +237,7 @@ export function heldLines(name: string, why: 'no-yes' | 'host' | 'transcript', h
 export interface CliAddResult {
   exit: 0 | 1;
   lines: string[];
-  /** For `skill_saved` telemetry, sent by cli-skills.ts (this module loads no telemetry). */
+  /** Where the skill was saved from, for cli-skills.ts. */
   saved?: { from: 'asked' | 'repeated' | 'repaired'; scope: 'personal' };
   held?: 'no-yes' | 'host';
   /** Phase 2: the save was moment 5's split, for `skill_changed{split}`. */

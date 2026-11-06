@@ -34,8 +34,6 @@ import type { Note } from '../notes/notes.js';
 import { repoPlace } from '../notes/home.js';
 import { readSettings } from '../skills/settings.js';
 import { nameTaken, personAtTerminal, type PersonCheck, type PersonDeps } from '../skills/store.js';
-import { countBucket, durationBucket, initKindCounts } from '../telemetry/contract.js';
-import { track } from '../telemetry/track.js';
 import { candidateId, pickFive } from './candidates.js';
 import { whyLine } from './claude-call.js';
 import { lookBackOffThread } from './discover-worker.js';
@@ -314,13 +312,6 @@ export async function finishLookBack(repo: string, reads: LookBackReads,
     }, env);
   }
   const place = { dir: repo, repoKey, runId: run.id };
-  const tele = (outcome: string, picked: number) => {
-    if (!looked) return;
-    track('cold_start', {
-      source: 'sessions', outcome, sessions_bucket: countBucket(lb.sessions.length), offered_bucket: countBucket(items.length),
-      picked_bucket: countBucket(picked), duration_bucket: durationBucket(Date.now() - reads.started), model: run.model, ...initKindCounts('offered', items),
-    }, { repo });
-  };
   /** #662's two keeps, each with its own answer: the review rows and the memory rows picked, none, or null (asked again). */
   const keepTeam = async (pick: ((rows: InitItem[]) => InitItem[]) | null | 'auto') => {
     const choose = (rows: InitItem[]) => (pick === null ? null : pick === 'auto' ? undefined : pick(rows));
@@ -359,7 +350,6 @@ export async function finishLookBack(repo: string, reads: LookBackReads,
     }
     if (reads.reviews) await finishReviewRead(repo, reads.reviews, async () => []);
     if (reads.sessions) await finishSessionRead(repo, reads.sessions, async () => []);
-    tele('none_found', 0);
     return { ...none, read, skills };
   }
 
@@ -382,7 +372,6 @@ export async function finishLookBack(repo: string, reads: LookBackReads,
         }, env);
       }
       await keepTeam(null);
-      tele('cancelled', 0);
     } else {
       const ticked = new Set(answer.how === 'enter' ? answer.ticked : []);
       const picked = final.filter((i) => ticked.has(i.n));
@@ -401,7 +390,6 @@ export async function finishLookBack(repo: string, reads: LookBackReads,
         }, env);
       }
       if (looked) markLookedBack(repo, now, env);
-      tele('found', result.kept.filter((i) => !isTeam(i)).length);
     }
     for (const l of afterKeepLines({ ...result, how: answer.how }, facts)) say(l);
     return { kept: result.kept.length, inRepo: result.kept.some((i) => i.scope === 'repo' || isTeam(i)), team: teamSaved, read, skills };
@@ -438,7 +426,6 @@ export async function finishLookBack(repo: string, reads: LookBackReads,
     for (const l of relayLines(list, facts)) say(l);
   }
   if (looked && !reads.skills) say(INIT_COPY.skillsOff!);
-  tele('relayed', kept);
   const teamKept = (fromTeam.fromReviews?.saved.length ?? 0) + (fromTeam.fromSessions?.saved.length ?? 0) + (fromTeam.fromMemory?.saved.length ?? 0);
   return { kept: kept + teamKept, inRepo: fromTeam.team > 0, team: fromTeam.team, teamKept: { fromReviews: fromTeam.fromReviews, fromSessions: fromTeam.fromSessions, fromMemory: fromTeam.fromMemory }, read, skills };
 }

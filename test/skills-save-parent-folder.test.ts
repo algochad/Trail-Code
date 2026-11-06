@@ -47,7 +47,7 @@ function realAsk(b: Box, sec: number, words: string): string {
     const g = skillsGate(input, dir, env);
     return g.ok ? { ok: true as const, ctx: { ...g.ctx, checkout: b.repo, repoKey: SHOP } } : g;
   };
-  const out = promptSkills({ ...b.payload, hook_event_name: "UserPromptSubmit", prompt: words }, "/home/dev/shop", { ...b.env, TRAIL_TEST_NOW: iso(sec) }, { track: () => {}, gate });
+  const out = promptSkills({ ...b.payload, hook_event_name: "UserPromptSubmit", prompt: words }, "/home/dev/shop", { ...b.env, TRAIL_TEST_NOW: iso(sec) }, { gate });
   const m = /trail skills add ([a-z0-9-]+) --run (r-[\w-]+)/.exec(out.context ?? "");
   assert.ok(m, out.context);
   return m[2]!;

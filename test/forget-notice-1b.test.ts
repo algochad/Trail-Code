@@ -45,7 +45,7 @@ async function trail(h: { env: NodeJS.ProcessEnv; cwd: string }, args: string[],
   let code = 0;
   program.exitOverride();
   program.configureOutput({ writeOut: () => undefined, writeErr: () => undefined });
-  registerSkillCommands(program, { env: h.env, cwd: () => h.cwd, personDeps: person, track: () => undefined, out: (l) => out.push(l), err: () => undefined, exit: (c) => { code = c; } });
+  registerSkillCommands(program, { env: h.env, cwd: () => h.cwd, personDeps: person, out: (l) => out.push(l), err: () => undefined, exit: (c) => { code = c; } });
   try {
     await program.parseAsync(["node", "trail", ...args]);
   } catch (e) {

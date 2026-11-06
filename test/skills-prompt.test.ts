@@ -20,8 +20,7 @@ import { timeBar } from "./machine-speed.js";
 
 const FROM = "[trail] From Trail, the tool this person installed to keep commands that worked as skills.";
 const webshopRelease = () => releaseSkill({ applies: WEBSHOP, trail: "s-7f3a2c" });
-const events: Array<[string, Record<string, string>]> = [];
-const deps = (b: Box, extra: Partial<PromptDeps> = {}): Partial<PromptDeps> => ({ track: (e, p) => events.push([e, p]), gate: gateFor(b), ...extra });
+const deps = (b: Box, extra: Partial<PromptDeps> = {}): Partial<PromptDeps> => ({ gate: gateFor(b), ...extra });
 const run = (b: Box, prompt: string, extra: Record<string, unknown> = {}, env = b.env, d: Partial<PromptDeps> = deps(b)) =>
   promptSkills(payload(b, prompt, extra), CWD, env, d);
 
@@ -241,10 +240,8 @@ test("an answer to the pending offer goes through g5: yes, show me and no are an
   ] as const) {
     const b = shipBox(`answer-${tele}`);
     offerIn(b);
-    events.length = 0;
     const out = run(b, answer);
     assert.ok(out.context?.startsWith(lead), `${answer}: ${out.context}`);
-    assert.deepEqual(events.filter(([e]) => e === "skill_answer"), [["skill_answer", { answer: tele }]]);
     const st = stateOf(b);
     assert.deepEqual(st.injected, []);
     if (answer === "yes") assert.ok(st.pendingOffer?.yes, "g5 recorded the yes");
@@ -254,10 +251,8 @@ test("an answer to the pending offer goes through g5: yes, show me and no are an
 test("an unrelated message after an offer the agent said: moved on, then the prompt is an ask like any other", () => {
   const b = shipBox("moved");
   offerIn(b);
-  events.length = 0;
   const out = run(b, "now ff to prod please");
   assert.ok(out.context?.startsWith(`${FROM} They typed: "now ff to prod please". That isn't an answer to Trail's offer to keep the last job as a skill, so Trail dropped the offer and kept nothing. No need to bring the offer up again.\n[trail] Skill ship-beta-then-prod fits`), out.context);
-  assert.deepEqual(events.filter(([e]) => e === "skill_answer"), [["skill_answer", { answer: "none" }]]);
   assert.equal(stateOf(b).pendingOffer, null);
 });
 
@@ -275,13 +270,11 @@ test("credit in the prompt hook (D57): a passed check settles the use on the nex
     replyAt("Published 1.4.2: npm shows it. Used skill release-npm", 25),
     typedIn(b, "now look at the cart page styles", 120),
   ]);
-  events.length = 0;
   run(b, "now look at the cart page styles", {}, withNow(b, "2026-10-20T10:02:00.000Z"));
   const uses = readLedger("s-7f3a2c", b.env).filter((l) => l.event === "use");
   assert.equal(uses.length, 1);
   assert.deepEqual(uses[0] && "stepsRan" in uses[0] ? [uses[0].stepsRan, uses[0].check, uses[0].readyFailed] : null, [[1, 2, 6], "passed", ["clean", "on-branch"]]);
   assert.equal(getSkillState("s-7f3a2c", b.env)?.uses, 1);
-  assert.deepEqual(events.filter(([e]) => e === "skill_used"), [["skill_used", { outcome: "checked" }]]);
   // The correction window: the prompt that settled it was the first after the use; a correction as the second counts once.
   grow(b, [typedIn(b, "no, that's wrong, it should go to staging not prod", 200)]);
   run(b, "no, that's wrong, it should go to staging not prod", {}, withNow(b, "2026-10-20T10:03:30.000Z"));

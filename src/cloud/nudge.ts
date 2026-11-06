@@ -25,8 +25,6 @@ import { brand } from "../brand.js";
 import { graftCliPath } from "../claude/paths.js";
 import { keepsNotes, knownRepos, noteCount, repoName, repoPlace, trailHome } from "../notes/home.js";
 import { currentTranscript } from "../notes/session-cost.js";
-import { durationBucket } from "../telemetry/contract.js";
-import { track } from "../telemetry/track.js";
 import { ensurePrivateDir } from "../util/private-file.js";
 import { readJson, writeJsonAtomic } from "../util/state.js";
 import { claimHandoff, cloudEnabled, cloudForRepo, cloudIn, readClouds, registerHandoff, SECRET_FILE_MODE, serverUrl, trailUrl, writeCloud, type ClaimResult, type HandoffRepo } from "./workspace.js";
@@ -200,7 +198,6 @@ export function cloudLines(repo: string, opts: NudgeOptions): string[] {
     writeState({ session: session ?? undefined, at: now, shown: shown + 1, pending: link }, env);
     startWait();
     const signedIn = clouds.length > 0;
-    track("brain_signup_opened", { mode: "nudge", command: opts.command, wording: signedIn ? "link" : WORDING_IDS[i] }, { repo });
     const url = connectUrl(link.state, linkServer(link, env));
     if (signedIn) return linkLines(repoName(place.key, place.checkout), url, agent);
     return nudgeLines(NUDGE_WORDS[i], url, agent);
@@ -399,7 +396,6 @@ export async function waitForConnect(opts: WaitOptions = {}): Promise<ClaimResul
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const started = now();
-  const settled = (outcome: string) => track("brain_signup_settled", { outcome, mode: "nudge", duration_bucket: durationBucket(now() - started) }, {});
   const done = (patch: Partial<NudgeState> = {}) => writeState({ waitingSince: undefined, ...patch }, env);
   // A link for a repo that's linked since has nothing left to wait for.
   const live = (): Pending | null => {
@@ -438,17 +434,14 @@ export async function waitForConnect(opts: WaitOptions = {}): Promise<ClaimResul
         writeCloud(cloud, env);
         const sent = await syncWorkspaceRepos(cloud, opts.fetchImpl);
         done({ pending: undefined, linked: { workspace: cloud.workspace.name, url: cloud.workspace.url, repos: sent.repos, learnings: sent.learnings } });
-        settled("linked");
         return got;
       }
       if ("error" in got) {
         done({ pending: undefined });
-        settled(got.reason);
         return got;
       }
       if (now() - started >= (opts.waitMs ?? WAIT_MS)) {
         done();
-        settled("timed_out");
         return got;
       }
       await sleep(pollGap(now() - started));

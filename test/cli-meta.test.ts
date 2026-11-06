@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, sep } from 'node:path';
 import {
-  formatVersionReport,
   formatUpgradeReport,
   resolvePackageJsonPath,
   readCurrentVersion,
@@ -14,23 +13,6 @@ import {
   clearNpmLeftover,
   noSudoFix,
 } from '../src/cli-meta.js';
-
-// --- formatVersionReport: pure formatting, injected npm-view results (no network) ---
-
-test('formatVersionReport: up to date', () => {
-  const out = formatVersionReport('0.4.4', { ok: true, version: '0.4.4' });
-  assert.equal(out, 'graft 0.4.4\nlatest on npm: 0.4.4 ✓ up to date');
-});
-
-test('formatVersionReport: newer version available', () => {
-  const out = formatVersionReport('0.4.4', { ok: true, version: '0.4.5' });
-  assert.equal(out, 'graft 0.4.4\nlatest on npm: 0.4.5, run graft upgrade');
-});
-
-test('formatVersionReport: offline / unreachable', () => {
-  const out = formatVersionReport('0.4.4', { ok: false });
-  assert.equal(out, 'graft 0.4.4\nlatest: unreachable (offline?)');
-});
 
 // --- formatUpgradeReport: pure formatting, injected upgrade results (no network, no spawn) ---
 

@@ -17,7 +17,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { trailHome } from "../notes/home.js";
-import { telemetryOn } from "../telemetry/gate.js";
 import { ensurePrivateDir, PRIVATE_FILE_MODE } from "../util/private-file.js";
 import { readJson, writeJsonAtomic } from "../util/state.js";
 
@@ -167,7 +166,7 @@ export function sameWorkspace(a: Cloud, b: Cloud): boolean {
  */
 export function cloudEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.TRAIL_CLOUD === "1" || readCloud(env) !== null) return true;
-  return env.TRAIL_CLOUD !== "0" && telemetryOn(undefined, env);
+  return env.TRAIL_CLOUD !== "0";
 }
 
 /** Owner-only: the file holds the workspace token. */

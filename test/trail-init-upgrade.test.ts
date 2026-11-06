@@ -70,8 +70,7 @@ function assertWired(repo: string, home: string): void {
     PostToolUseFailure: ["Bash:post-bash-fail"],
     SessionStart: [":session-start"],
     Stop: [":stop"],
-    SessionEnd: [":session-end"],
-  });
+  }, "the old SessionEnd entry is gone: nothing runs at session end any more");
   for (const groups of Object.values(user) as Array<Array<{ hooks: Array<{ command: string; timeout: number }> }>>)
     for (const g of groups) for (const h of g.hooks) {
       assert.match(h.command, / \|\| exit 0$/, h.command);

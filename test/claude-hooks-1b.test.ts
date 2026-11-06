@@ -27,21 +27,8 @@ import {
   agentRuns, at, box, cli, CWD, done, finish, hook, ls, offersLog, one, pathWithoutTimeout, preBashHook, promptHook, ran, release, reply, sayOfferLines, session, SHOP, skillsKept, startHook, stateOf, timeoutSeen, typedLine,
   type Box, type Session,
 } from './claude-skills-journey-fixtures.js';
-import { allowedValue, EVENTS } from '../src/telemetry/contract.js';
 
 const decision = (out: string) => one(out)?.hookSpecificOutput ?? null;
-
-/** Telemetry carries only the contract's keys and values (counts only, R16). */
-function contractOnly(sent: Array<[string, Record<string, string>]>): void {
-  for (const [event, props] of sent) {
-    const keys = EVENTS[event];
-    assert.ok(keys, `not a contract event: ${event}`);
-    for (const [k, v] of Object.entries(props)) {
-      assert.ok(keys.has(k), `${event}.${k} is not in the contract`);
-      assert.ok(allowedValue(event, k, String(v)), `${event}.${k}=${v} is not a contract value`);
-    }
-  }
-}
 
 test('a trail skills lesson command reaches the lesson gate: no lesson offer in this session denies it (3.3 step 2)', async () => {
   const b = box('h1b-lesson-gate');
@@ -184,7 +171,6 @@ test('J16 at Stop: each sure-fail deny is counted once, and the same command run
     reply(s, at(17, 30), 'Tests pass.');
     const r = stopSent(s, at(17, 31), 'Tests pass.');
     const guard = r.sent.filter(([e]) => e === 'guardrail');
-    contractOnly(r.sent as Array<[string, Record<string, string>]>);
     assert.deepEqual(guard, [['guardrail', { class: 'no-timeout', outcome: 'sure-fail' }], ['guardrail', { class: 'no-timeout', outcome: 'avoided' }]]);
     assert.equal(stateOf(s).deniedSeen, 1);
     reply(s, at(17, 40), 'Anything else?');
@@ -327,7 +313,7 @@ test('J07 end to end: a release from the block, the person\'s correction, the fi
   }
 });
 
-test('J14d through the hooks: a cue phrase whose block is passed over twice leaves asks, and the prompt hook sends skill_stale{unfollowed} once', async () => {
+test('J14d through the hooks: a cue phrase whose block is passed over twice leaves asks, and the prompt hook stops asking on the phrase', async () => {
   const { savePersonal } = await import('../src/skills/store.js');
   const { compiled } = await import('./skills-store-fixtures.js');
   const { parseSkillMd } = await import('../src/skills/skillmd.js');
@@ -336,27 +322,24 @@ test('J14d through the hooks: a cue phrase whose block is passed over twice leav
     const PHRASE = 'redo the acme publish';
     const ref = savePersonal(compiled('release-npm', { trail: 's-7f3a2c', applies: SHOP, asks: `publish, release, ${PHRASE}` }),
       { from: 'repeated', runId: 'r-0930-0001', consent: 'offer-yes', stepsVerified: 2, env: { HOME: b.home, TRAIL_HOME: b.trail }, now: new Date(at(10, 0)) });
-    const sent: Array<[string, Record<string, string>]> = [];
     for (const day of [12, 13]) {
       const s = session(b);
       assert.match(ctxOf(await promptHook(s, at(day, 0), PHRASE)), /^\[trail\] Skill release-npm fits/);
       await agentRuns(s, at(day, 10), 'git status', () => ({ out: 'nothing to commit, working tree clean' }));
       reply(s, at(day, 20), 'The tree is clean.');
-      sent.push(...(stopSent(s, at(day, 21), 'The tree is clean.').sent as Array<[string, Record<string, string>]>));
+      stopSent(s, at(day, 21), 'The tree is clean.');
       // The person moves to another job: the release run closes with none of its steps run, in the prompt hook's
-      // credit step (its telemetry read through the hook's track).
+      // credit step.
       typedLine(s, at(day, 60), 'run the test suite');
       const { promptSkills } = await import('../src/claude/prompt-skills.js');
       promptSkills({ ...s.payload, hook_event_name: 'UserPromptSubmit', prompt: 'run the test suite' }, s.b.project,
         { HOME: b.home, TRAIL_HOME: b.trail, CLAUDE_CODE_ENTRYPOINT: 'cli', TRAIL_TEST_NOW: at(day, 60), DO_NOT_TRACK: '1', PATH: process.env.PATH },
-        { track: (e, p) => sent.push([e, p]) });
+        {});
       await agentRuns(s, at(day, 65), 'npm test', () => ({ out: 'Tests: 12 passed, 12 total' }));
       reply(s, at(day, 70), 'Got it.');
-      sent.push(...(stopSent(s, at(day, 71), 'Got it.').sent as Array<[string, Record<string, string>]>));
+      stopSent(s, at(day, 71), 'Got it.');
     }
     assert.equal(parseSkillMd(readFileSync(ref.file, 'utf8'), 'release-npm')!.meta.asks, 'publish, release');
-    assert.deepEqual(sent.filter(([e]) => e === 'skill_stale'), [['skill_stale', { reason: 'unfollowed' }]], JSON.stringify(sent));
-    contractOnly(sent);
   } finally {
     done(b);
   }

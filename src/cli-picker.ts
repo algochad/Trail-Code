@@ -110,18 +110,6 @@ export interface PickerRow {
   kind: 'host' | 'setting';
 }
 
-/**
- * The id of the telemetry consent row.
- *
- * The picker is where a user is already deciding what graft may touch, which
- * makes it the honest place to also ask whether they mind anonymous usage stats
- * — the same move munder-difflin makes with a pre-checked box in onboarding, and
- * the reason this is a disclosed default rather than a silent one. It is only
- * offered when telemetry could actually run: showing it in a fork, in CI, or
- * under DO_NOT_TRACK would be theatre.
- */
-export const TELEMETRY_ROW_ID = '__telemetry';
-
 export interface PickerState {
   rows: PickerRow[];
   /** Index into {@link visibleRows}, not into `rows`. */
@@ -140,15 +128,12 @@ export function visibleRows(state: PickerState): PickerRow[] {
 
 /**
  * Claude Code starts checked — it's the deep integration — everything else off.
- *
- * `offerTelemetry` appends the consent row, checked. Default false so every
- * existing caller (and every test) sees exactly the host rows it always did.
+
  */
 export function initialPickerState(
   plan: HostPlan[],
   repo: string,
   home: string,
-  opts: { offerTelemetry?: boolean } = {},
 ): PickerState {
   const rows: PickerRow[] = plan.map((p) => ({
     id: p.id,
@@ -159,17 +144,6 @@ export function initialPickerState(
     hasGlobal: p.writes.some((w) => w.scope === 'global'),
   }));
   const checked = new Set(plan.some((p) => p.id === 'claude') ? ['claude'] : []);
-  if (opts.offerTelemetry) {
-    rows.push({
-      id: TELEMETRY_ROW_ID,
-      label: 'anonymous usage stats',
-      kind: 'setting',
-      detected: true,
-      summary: 'no code, no file paths, no queries',
-      hasGlobal: false,
-    });
-    checked.add(TELEMETRY_ROW_ID);
-  }
   return { rows, cursor: 0, checked, done: false, aborted: false };
 }
 
@@ -324,33 +298,23 @@ export function pickedHostIds(state: PickerState): string[] {
   return state.rows.filter((r) => r.kind === 'host' && state.checked.has(r.id)).map((r) => r.id);
 }
 
-/** The consent answer, or undefined when the row was never offered (a fork, CI,
- *  DO_NOT_TRACK) — undefined means "don't change what's stored". */
-export function pickedTelemetry(state: PickerState): boolean | undefined {
-  if (!state.rows.some((r) => r.id === TELEMETRY_ROW_ID)) return undefined;
-  return state.checked.has(TELEMETRY_ROW_ID);
-}
-
 /**
- * Drive the picker on a real terminal. Resolves the chosen agents plus the
- * consent answer, or null if the user cancelled — in which case the caller must
- * write nothing, telemetry setting included.
+ * Drive the picker on a real terminal. Resolves the chosen agents, or null if
+ * the user cancelled — in which case the caller must write nothing.
  */
 export interface Picked {
   /** Agent ids to wire. */
   hosts: string[];
-  /** The consent answer, or undefined when the row was not offered. */
-  telemetry?: boolean;
 }
 
 export async function runPicker(
   plan: HostPlan[],
   repo: string,
   home: string,
-  opts: { offerTelemetry?: boolean; title?: string | null } = {},
+  opts: { title?: string | null } = {},
 ): Promise<Picked | null> {
-  const state = await drivePicker(initialPickerState(plan, repo, home, opts), opts.title);
-  return state ? { hosts: pickedHostIds(state), telemetry: pickedTelemetry(state) } : null;
+  const state = await drivePicker(initialPickerState(plan, repo, home), opts.title);
+  return state ? { hosts: pickedHostIds(state) } : null;
 }
 
 /** Columns a character takes on a terminal: 2 for East Asian wide characters and emoji, else 1. */

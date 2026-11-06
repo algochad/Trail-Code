@@ -24,8 +24,6 @@ import { type PastSession } from "../init/sessions.js";
 import { discoverOffThread } from "../init/discover-worker.js";
 import { eachLine } from "../init/transcript.js";
 import { typedText } from "../trace/claude.js";
-import { countBucket, durationBucket } from "../telemetry/contract.js";
-import { track } from "../telemetry/track.js";
 import { readJson, writeJsonAtomic } from "../util/state.js";
 import { noteAuthor } from "../notes/git-facts.js";
 import { ensureRepoHome } from "../notes/home.js";
@@ -289,21 +287,7 @@ export async function finishSessionRead(
   const chosen = offered.length && keep ? await keep(offered) : offered;
   const kept = chosen ?? [];
   const saved = kept.length ? saveSessionLearnings(repo, kept) : [];
-  const outcome = chosen === null ? "cancelled" : offered.length ? "found" : (result.reason ?? "none_found");
   if (chosen !== null && result.reason !== "no_claude" && result.reason !== "failed" && result.reason !== "no_sessions")
     writeJsonAtomic(readMark(repo), { at: Date.now(), model: result.model, saved: saved.length, ms: result.durationMs, ...(result.costUsd === undefined ? {} : { costUsd: result.costUsd }), ...(result.newest ? { newest: result.newest } : {}) }, true);
-  track(
-    "cold_start",
-    {
-      source: "sessions_read",
-      outcome,
-      sessions_bucket: countBucket(result.sessions),
-      offered_bucket: countBucket(offered.length),
-      picked_bucket: countBucket(saved.length),
-      duration_bucket: durationBucket(result.durationMs),
-      model: result.model,
-    },
-    { repo },
-  );
   return { result, saved, kept, offered: offered.length, cancelled: chosen === null };
 }

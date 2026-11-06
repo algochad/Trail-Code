@@ -33,7 +33,7 @@ test("the block's gated note says a denied step is not run again this turn, and 
 test("the gate's deny where the session can't ask says the same: not again this turn, even after a yes in chat", async () => {
   const b = box("retry", { entry: "sdk-cli" });
   save(b, shipSkill());
-  promptSkills(payload(b, "now ff to prod please"), CWD, b.env, { track: () => {}, gate: gateFor(b) });
+  promptSkills(payload(b, "now ff to prod please"), CWD, b.env, { gate: gateFor(b) });
   const cmd = "git push git@github.com:acme/webshop.git $(git rev-parse HEAD):refs/heads/prod";
   const d = await preBashSkills({ session_id: SID, tool_name: "Bash", tool_input: { command: cmd }, permission_mode: "default" }, CWD, b.env, cmd);
   assert.equal(d?.permissionDecision, "deny");

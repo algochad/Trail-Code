@@ -93,8 +93,7 @@ test("end to end: a ship block, its steps run with the commit written out and it
   const { box, CWD, gateFor, grow, payload, ranIn, replyAt, save, typedIn, withNow } = await import("./skills-prompt-fixtures.js");
   const b = box("shipcredit");
   save(b, shipSkill());
-  const used: Array<[string, Record<string, string>]> = [];
-  const d = { gate: gateFor(b), track: (e: string, p: Record<string, string>) => used.push([e, p]) };
+  const d = { gate: gateFor(b) };
   assert.match(promptSkills(payload(b, "now ff to prod please"), CWD, b.env, d).context ?? "", /^\[trail\] Skill ship-beta-then-prod fits/);
   grow(b, [
     typedIn(b, "now ff to prod please", 0),
@@ -109,5 +108,4 @@ test("end to end: a ship block, its steps run with the commit written out and it
   promptSkills(payload(b, "now look at the cart page styles"), CWD, withNow(b, "2026-10-20T10:02:00.000Z"), d);
   const uses = readLedger("s-4c91e0", b.env).filter((l) => l.event === "use") as Array<{ stepsRan: number[]; check: string }>;
   assert.deepEqual(uses.map((u) => [u.stepsRan, u.check]), [[[1, 2, 4, 5], "passed"]]);
-  assert.deepEqual(used.filter(([e]) => e === "skill_used"), [["skill_used", { outcome: "checked" }]]);
 });

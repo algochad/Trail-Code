@@ -13,7 +13,6 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { brand, cmd, graftNotice, handoverStampPath, noticeStampPath, strandedRepoNotice, tag, trailHandoverLine } from "../src/brand.js";
-import { track } from "../src/telemetry/track.js";
 import { commandInvokesGraft } from "../src/claude/session-metrics.js";
 import { savingsLine, sumSavingsFooters } from "../src/context/savings.js";
 import { homeEnv, tmpRepo } from "./helpers.js";
@@ -139,17 +138,6 @@ test("a shell command running trail counts as a retrieval, like graft", () => {
   assert.equal(commandInvokesGraft("graft ask x"), true);
   assert.equal(commandInvokesGraft("mytrail ask x"), false);
   assert.equal(commandInvokesGraft("echo trail"), false);
-});
-
-test("every telemetry event says which name ran it", () => {
-  process.env.GRAFT_POSTHOG_KEY = "phc_test_key";
-  const home = scratchHome();
-  const open = { HOME: home, USERPROFILE: home } as NodeJS.ProcessEnv;
-  const viaTrail = track("first_run", {}, { home, env: { ...open, TRAIL_INVOKED_AS: "trail" } });
-  const other = scratchHome();
-  const viaGraft = track("first_run", {}, { home: other, env: { HOME: other, USERPROFILE: other } });
-  assert.equal(viaTrail?.properties.cli_name, "trail");
-  assert.equal(viaGraft?.properties.cli_name, "graft");
 });
 
 // --- the two command layouts, end to end ---

@@ -489,7 +489,7 @@ test("trail init moves a graft-wired repo to trail's names, and uninstall takes 
     assert.ok(local.permissions.allow.includes("Bash(trail:*)"));
     assert.equal(local.hooks.SessionStart, undefined);
     assert.match(JSON.stringify(local.hooks.UserPromptSubmit), /\.trail\/hook\.cjs\\" prompt/);
-    assert.match(JSON.stringify(local.hooks.SessionEnd), /\.trail\/hook\.cjs\\" session-end/);
+    assert.equal(local.hooks.SessionEnd, undefined, "nothing runs at session end any more");
     // No MCP server for Claude Code: graft's .mcp.json had only graft's, so it goes.
     assert.equal(existsSync(join(d, ".mcp.json")), false);
     // Nothing personal shows in git, and .gitignore is untouched by the setup.

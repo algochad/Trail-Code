@@ -6,15 +6,13 @@
  * run them and exit 1. This is the only module that imports the person-only
  * setters of settings.ts (a static test pins it).
  *
- * `add` is g5's CLI half (`cliAdd`): this file only prints what it returns
- * and sends `skill_saved`, because the save gate's import closure may not load
- * telemetry. Telemetry carries closed-set values only, never a name.
+ * `add` is g5's CLI half (`cliAdd`): this file only prints what it returns,
+ * because the save gate's import closure may not load the CLI.
  */
 import { homedir } from 'node:os';
 import { Argument, InvalidArgumentError, type Command } from 'commander';
 import { repoPlace } from '../notes/home.js';
 import { flatLine } from '../notes/flatten.js';
-import { track as sendEvent } from '../telemetry/track.js';
 import { findPriorSheet, readRunSheet } from '../trace/runs.js';
 import { compileRun, refusalWords } from './compile.js';
 import { draftText, repoName } from './compile-words.js';
@@ -39,7 +37,6 @@ export interface SkillCliDeps {
   cwd?: () => string;
   /** Passed to the real `personAtTerminal` (TTYs, the process table), as g4's tests do. */
   personDeps?: PersonDeps;
-  track?: (event: string, props: Record<string, string>) => void;
   out?: (line: string) => void;
   err?: (line: string) => void;
   exit?: (code: number) => void;
@@ -76,7 +73,7 @@ const errText = (e: unknown) => `✗ ${one(e instanceof Error ? e.message : Stri
 
 interface Io {
   env: NodeJS.ProcessEnv; now: () => Date; cwd: () => string; person: () => PersonCheck;
-  track: (event: string, props: Record<string, string>) => void; out: (l: string) => void; err: (l: string) => void; exit: (c: number) => void;
+  out: (l: string) => void; err: (l: string) => void; exit: (c: number) => void;
 }
 
 function io(d: SkillCliDeps): Io {
@@ -86,7 +83,6 @@ function io(d: SkillCliDeps): Io {
     now: d.now ?? (() => trailNow(env)),
     cwd: d.cwd ?? (() => process.cwd()),
     person: () => personAtTerminal(env, d.personDeps ?? {}),
-    track: d.track ?? ((e, p) => { sendEvent(e, p); }),
     out: d.out ?? ((l) => console.log(l)),
     err: d.err ?? ((l) => console.error(l)),
     exit: d.exit ?? ((c) => { process.exitCode = c; }),
@@ -150,8 +146,6 @@ function list(x: Io, json: boolean): void {
   const r = skillsReport(x.env, x.now(), x.cwd());
   if (json) x.out(JSON.stringify(r, null, 2));
   else for (const l of reportLines(r)) x.out(l);
-  // Phase 2 (P27): whether the value line went out, and how; no number from it.
-  if (r.value) x.track('skill_value', { channel: 'list' });
 }
 
 function show(x: Io, name: string): void {
@@ -229,8 +223,6 @@ function onlyRun(cmd: Command): void {
 function add(x: Io, name: string, runId: string): void {
   const r = cliAdd(name, runId, x.env, x.now(), x.cwd());
   for (const l of r.lines) (r.exit === 0 ? x.out : x.err)(l);
-  if (r.saved) x.track('skill_saved', { from: r.saved.from, scope: r.saved.scope });
-  if (r.changed) x.track('skill_changed', { op: r.changed });
   if (r.exit !== 0) x.exit(r.exit);
 }
 
@@ -242,7 +234,6 @@ function keep(x: Io, names: string[]): void {
   const r = keepHeld(name, x.person(), x.env, x.now());
   if (r.ok) {
     x.out(`✓ kept ${one(name)} as one of your skills · undo: trail forget ${one(name)}`);
-    x.track('skill_saved', { from: 'asked', scope: 'personal' });
     return;
   }
   if (r.reason === 'not-a-person') return fail(x, personOnly(`skills keep ${one(name)}`));
@@ -273,7 +264,6 @@ function offers(x: Io, state: 'on' | 'off', here: boolean): void {
   }
   setOffers(false, key, x.env, x.now());
   x.out(key ? `Skill offers are off${where}. Turn them back on: trail skills offers on --here` : OFFERS_OFF_LINE);
-  x.track('skill_answer', { answer: 'off' });
 }
 
 function onOff(x: Io, state: 'on' | 'off', name: string | undefined): void {

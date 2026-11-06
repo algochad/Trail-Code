@@ -1,7 +1,7 @@
 /**
  * Phase 2 through the real hooks (c8), continued: the retire proposal on 5 seeded firings and a live sixth, and the
  * fold after J07 (a lesson kept on the skill, then the use that ran it, extended into the skill). Every hook goes
- * through `main(event)` with Claude Code's payloads; the telemetry each journey queues is checked in order. Made-up
+ * through `main(event)` with Claude Code's payloads. Made-up
  * acme/shop and acme-cli only.
  */
 import { test } from 'node:test';
@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { agentRuns, at, box, done, finish, one, promptHook, reply, sayOfferLines, session, stateOf, stopHook, testsJob } from './claude-skills-journey-fixtures.js';
-import { blockOf, ctxOf, envOf, kept, offerLinesIn, PREP, publishOf, skillsEvents, TELEMETRY_ENV, updateCommandIn, type Session } from './claude-journeys-2-fixtures.js';
+import { blockOf, ctxOf, envOf, kept, offerLinesIn, PREP, publishOf, updateCommandIn, type Session } from './claude-journeys-2-fixtures.js';
 import { keepLessonCli } from '../src/skills/lesson-gate.js';
 import { offerLinesOf } from '../src/skills/offer-lines.js';
 import { readLedger } from '../src/skills/ledger.js';
@@ -18,14 +18,13 @@ import { listAllPersonal } from '../src/skills/store.js';
 import { getSkillState, updateSkillState } from '../src/skills/state.js';
 
 test('the retire proposal: 5 firings seeded, 1 followed; a sixth not followed at Stop proposes retiring it; "retire" moves it to .retired', async () => {
-  const b = box('c8-retire', { env: TELEMETRY_ENV });
+  const b = box('c8-retire');
   try {
     const name = await kept(b, 20, '1.4.0');
     const env = envOf(b, at(21, 0));
     const ref = listAllPersonal(env).find((r) => r.name === name)!;
     const seeded = [21, 22, 23, 24, 25].map((d, k) => ({ at: at(d, 3600), followed: k === 0 }));
     updateSkillState(ref.id, (s) => (s ? { ...s, firings: seeded } : s), env);
-    const before = skillsEvents(b).length;
 
     // Oct 26: the ask brings the block in; the agent does something else; the next ask closes that run in the prompt
     // hook, whose settle writes the sixth firing, and the Stop after that job proposes the retire.
@@ -48,14 +47,13 @@ test('the retire proposal: 5 firings seeded, 1 followed; a sixth not followed at
     assert.match(said, new RegExp(`Trail retired ${name}\\.`), said);
     assert.equal(existsSync(ref.dir), false);
     assert.ok(existsSync(join(b.trail, 'skills', '.retired', `${name}-2026-10-26`, 'SKILL.md')), 'moved, nothing deleted');
-    assert.deepEqual(skillsEvents(b).slice(before), ['skill_offered:retire', 'skill_answer:retire', 'skill_changed:retire']);
   } finally {
     done(b);
   }
 });
 
 test('the retire proposal comes once, ever: "keep it" keeps the skill, and later unfollowed firings bring no second one', async () => {
-  const b = box('c8-retire-keep', { env: TELEMETRY_ENV });
+  const b = box('c8-retire-keep');
   try {
     const name = await kept(b, 20, '1.4.0');
     const env = envOf(b, at(21, 0));
@@ -79,7 +77,6 @@ test('the retire proposal comes once, ever: "keep it" keeps the skill, and later
         assert.ok(existsSync(ref.file), 'kept');
       } else assert.equal(blockOf(out), '', 'no second proposal');
     }
-    assert.deepEqual(skillsEvents(b).filter((e) => /retire|answer/.test(e)), ['skill_offered:retire', 'skill_answer:no']);
   } finally {
     done(b);
   }
@@ -100,10 +97,9 @@ async function releaseWith(s: Session, day: number, v: string, extra: string[] =
 }
 
 test('J07 then the fold: the lesson the person kept on Oct 22 runs on Oct 24, and its yes folds it into the skill as v2 (story 4)', async () => {
-  const b = box('c8-j07-fold', { env: TELEMETRY_ENV });
+  const b = box('c8-j07-fold');
   try {
     const name = await kept(b, 20, '1.4.0');
-    const before = skillsEvents(b).length;
     // Oct 22 (J07): the release from the block, the person's correction, the fix, the lesson offer, yes, trail skills lesson.
     const s = session(b);
     await releaseWith(s, 22, '1.4.1');
@@ -134,30 +130,24 @@ test('J07 then the fold: the lesson the person kept on Oct 22 runs on Oct 24, an
     assert.match(l2, new RegExp(`^Fold your Oct 22 learning into ${name} as step 5\\? 1 line changes\\. \\(yes / show me / no\\)$`), l2);
     await sayOfferLines(s2, 24, [l1, l2], 45);
     const update = updateCommandIn(ctxOf(one(await promptHook(s2, at(24, 60), 'yes'))));
-    // The agent's shell runs the CLI: `updateCommand` prints what cliUpdate returns and sends skill_changed itself.
+    // The agent's shell runs the CLI: `updateCommand` prints what cliUpdate returns.
     const printed: string[] = [];
-    const cliEvents: string[] = [];
     let code = -1;
     await agentRuns(s2, at(24, 70), update, () => {
       const offerId = /--offer (\S+)/.exec(update)![1]!;
       code = updateCommand(name, { offer: offerId }, {
         env: envOf(b, at(24, 70)), now: () => new Date(at(24, 71)), person: () => ({ ok: false }) as never,
-        track: (e, p) => cliEvents.push(`${e}:${p.op}`), out: (l) => printed.push(l), err: (l) => printed.push(l),
+        out: (l) => printed.push(l), err: (l) => printed.push(l),
       });
       return { out: printed.join('\n'), failed: code !== 0 };
     });
     assert.equal(code, 0, printed.join('\n'));
     assert.match(printed[0]!, new RegExp(`^✓ changed ${name} to v2 · `));
-    assert.deepEqual(cliEvents, ['skill_changed:extend']);
     const env = envOf(b, at(24, 80));
     const ref = listAllPersonal(env).find((r) => r.name === name)!;
     assert.match(readFileSync(ref.file, 'utf8'), /node scripts\/stamp-cli\.mjs \{version\}/);
     const changed = readLedger(ref.id, env).filter((l) => l.event === 'changed');
     assert.deepEqual(changed.map((l: any) => [l.op, l.from, l.to, (l.lessonIds ?? []).length]), [['extend', 1, 2, 1]]);
-    // The hooks' events in order (a kept lesson sends none: skill_saved is for skills).
-    assert.deepEqual(skillsEvents(b).slice(before).filter((e) => !e.startsWith('skill_used')),
-      ['skill_offered:correction', 'skill_answer:yes', 'skill_offered:update', 'skill_answer:yes']);
-    assert.deepEqual(skillsEvents(b).slice(before).filter((e) => e.startsWith('skill_used')), ['skill_used:checked', 'skill_used:checked']);
   } finally {
     done(b);
   }

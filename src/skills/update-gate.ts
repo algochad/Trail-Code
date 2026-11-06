@@ -15,7 +15,7 @@
  *
  * A file the person changed by hand is never written: the change goes beside
  * it as a proposal (4.6). Loaded only for an update command (the save gate
- * imports it lazily), and never loads the CLI or telemetry.
+ * imports it lazily), and never loads the CLI.
  */
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync } from 'node:fs';

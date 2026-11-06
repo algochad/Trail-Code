@@ -279,7 +279,7 @@ test("the prompt hook's 400 ms: a job cue's block gives the subcommand scan only
     let calls = 0;
     const start = Date.now();
     const clock = () => (!late || ++calls <= 3 ? start : start + 400);
-    const d: Partial<PromptDeps> = { track: () => {}, gate: gateFor(b), clock };
+    const d: Partial<PromptDeps> = { gate: gateFor(b), clock };
     const out = promptSkills(payload(b, "can you pull and publish 1.4.2"), CWD, b.env, d).context ?? "";
     assert.match(out, /Skill release-npm fits/, `the block comes (late: ${late})`);
     counts.push(goneCount(out));

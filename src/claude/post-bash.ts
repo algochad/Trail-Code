@@ -64,7 +64,7 @@ export function postBashRun(input: any, dir: string, env: NodeJS.ProcessEnv = pr
   return { out: context ? { ...r.out, context } : r.out, marked: r.marked, sent };
 }
 
-/** 3.4 step 1 (1b): the fix line for a wall hit, and `wall_hit` telemetry. '' when none, or on any throw. */
+/** 3.4 step 1 (1b): the fix line for a wall hit'' when none, or on any throw. */
 function wallPart(input: any, dir: string, env: NodeJS.ProcessEnv, failed: boolean, sent: Sent): string {
   try {
     if (!skillsOnFast(env) || input?.tool_name !== 'Bash') return '';

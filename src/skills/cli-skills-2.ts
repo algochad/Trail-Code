@@ -30,7 +30,6 @@ export interface CliCtx {
   env: NodeJS.ProcessEnv;
   now: () => Date;
   person: () => PersonCheck;
-  track: (event: string, props: Record<string, string>) => void;
   out: (l: string) => void;
   err: (l: string) => void;
 }
@@ -46,8 +45,6 @@ export function updateCommand(name: string, opts: { offer?: string }, x: CliCtx)
   }
   const r = cliUpdate(name, opts.offer, x.env, x.now());
   for (const l of r.lines) (r.code === 0 ? x.out : x.err)(l);
-  // A proposal changes no file Trail reads; adopting it later is its own `skill_changed{adopted}`.
-  if (r.code === 0 && r.op && !r.proposal) x.track('skill_changed', { op: r.op });
   return r.code;
 }
 
@@ -77,7 +74,6 @@ export function restoreVersionCommand(name: string, version: string, x: CliCtx):
     return 1;
   }
   x.out(`✓ ${one(name)} has v${v}'s steps again, as v${r.version} · go back: trail skills restore ${one(name)} --version ${r.version - 1}`);
-  x.track('skill_changed', { op: 'restore-version' });
   return 0;
 }
 

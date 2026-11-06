@@ -7,7 +7,6 @@
 import { existsSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cacheDir, readJson, writeJsonAtomic } from '../util/state.js';
-import type { AgentHost } from '../telemetry/contract.js';
 
 export {
   LOCK_STALE_MS,
@@ -78,17 +77,6 @@ export interface SessionState {
    * this session (note-signals.ts keys), so each is asked about once and a
    * session at most NOTE_ASKS_PER_SESSION times. */
   noteAsks?: string[];
-  /** Set once this session has been rolled up into a `session_summary`
-   * telemetry event, so a resumed or long-lived session is counted once.
-   * A flag rather than deleting the file: the file still holds
-   * `injectedPointers`, which a resumed session needs. */
-  summarized?: boolean;
-  /** Which host recorded this session, stamped on the first tool use. Lets the
-   * `session_summary` be attributed correctly even when Claude Code's idle sweep
-   * is what finally flushes a Cursor session. Optional: files written before
-   * host-stamping (or an empty session never touched by a tool) fall back to the
-   * flushing host. */
-  host?: AgentHost;
 }
 
 function emptySession(): SessionState {
@@ -113,7 +101,7 @@ export function sessionDir(d: string): string { return join(cacheDir(d), 'sessio
 function sessionPath(d: string, id: string): string { return join(sessionDir(d), `${id}.json`); }
 
 /** Every session id with a file on disk, or `[]` when none exist (never throws).
- *  Shared by the telemetry rollup and `graft stats` so they agree on the set. */
+ *  Shared by `graft stats` and the session sweep so they agree on the set. */
 export function listSessionIds(d: string): string[] {
   try {
     return readdirSync(sessionDir(d)).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length));
@@ -138,8 +126,7 @@ const PROMPTS_DROPPED = '.prompts-dropped';
 /**
  * Take the prompt out of every session file an older version wrote here.
  * Once per repo: the marker skips the read of every file on later session
- * starts. Each file keeps its mtime, since the idle sweep that rolls sessions
- * up into telemetry judges a session closed by it. Best-effort: a file that
+ * starts. Each file keeps its mtime, since the idle sweep judges a session closed by it. Best-effort: a file that
  * can't be read or written is tried again next time.
  */
 export function dropStoredPrompts(d: string): void {

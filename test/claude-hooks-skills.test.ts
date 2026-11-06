@@ -48,9 +48,3 @@ test('emitHook: Stop carries no additionalContext (the host has none for it), on
   assert.deepEqual(JSON.parse(written(() => emitHook('Stop', { context: 'c', notice: 'trail: x, 6 commands, 0 failed' }))), { systemMessage: 'trail: x, 6 commands, 0 failed' });
 });
 
-import { allowedValue } from '../src/telemetry/contract.js';
-
-test('hook_ms takes the skills part of PostToolUse as post-bash, and nothing that is not a hook', () => {
-  for (const e of ['post-bash', 'post-bash-fail', 'stop', 'prompt', 'session-start']) assert.ok(allowedValue('hook_ms', 'event', e), e);
-  assert.equal(allowedValue('hook_ms', 'event', 'npm publish'), false);
-});

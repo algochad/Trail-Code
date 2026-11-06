@@ -52,7 +52,7 @@ test("restore by version from Codex's agent with a terminal changes nothing and 
   const errs: string[] = [];
   const x: CliCtx = {
     env: { TRAIL_HOME: "/tmp/x-trail-nonexistent" }, now: () => new Date("2026-11-10T10:00:00Z"),
-    person: () => check(tree(["/opt/homebrew/bin/codex", "codex"])), track: () => assert.fail("nothing is sent"),
+    person: () => check(tree(["/opt/homebrew/bin/codex", "codex"])),
     out: () => assert.fail("nothing is printed as done"), err: (l) => errs.push(l),
   };
   assert.equal(restoreVersionCommand("ship-shop", "1", x), 1);

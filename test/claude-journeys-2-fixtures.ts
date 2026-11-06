@@ -72,19 +72,4 @@ export function cliUpd(b: Box, nowIso: string, command: string, sink?: { lines: 
   };
 }
 
-/** Telemetry the hooks queued for this box (GRAFT_POSTHOG_KEY set, DO_NOT_TRACK off, the queue in the box's home). */
-export const TELEMETRY_ENV = { GRAFT_POSTHOG_KEY: 'phc_test_key', GRAFT_POSTHOG_HOST: 'http://127.0.0.1:9', DO_NOT_TRACK: '0' };
-export function queued(b: Box): Array<[string, Record<string, string>]> {
-  try {
-    return readFileSync(join(b.home, '.graft', 'telemetry-queue.ndjson'), 'utf8').trim().split('\n').filter(Boolean)
-      .map((l) => JSON.parse(l)).map((e) => [String(e.event), e.properties as Record<string, string>]);
-  } catch {
-    return [];
-  }
-}
-const KEYS = ['moment', 'answer', 'op', 'channel', 'outcome', 'reason', 'from', 'scope'];
-/** Only the skills events, with their closed values (the hooks also queue hook_ms and the common properties). */
-export const skillsEvents = (b: Box) => queued(b).filter(([e]) => /^skill_/.test(e))
-  .map(([e, p]) => `${e}:${KEYS.filter((k) => typeof p[k] === 'string').map((k) => p[k]).join(',')}`);
-
 export type { Box, Session };

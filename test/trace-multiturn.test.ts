@@ -149,7 +149,7 @@ import { box, CWD, gateFor, grow, payload, ranIn, replyAt, save, SID, stateOf, t
 test("a run block stays live for its run: a long answer to the agent's question keeps it, and its gated step still asks", () => {
   const b = box("live-answer");
   save(b, shipSkill());
-  const deps = { track: () => {}, gate: gateFor(b) };
+  const deps = { gate: gateFor(b) };
   promptSkills(payload(b, "now ff to prod please"), CWD, b.env, deps);
   const answer = "leave it as it is, the two commits behind are docs only and they can wait for the next round, and keep the tag the way it was last time please, thanks a lot";
   grow(b, [typedIn(b, "now ff to prod please", 0), ...ranIn(b, "git fetch origin", "", 5),

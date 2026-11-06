@@ -4,7 +4,7 @@
  * in the repo the command runs in, and "unused since" after 60 days; then the
  * guardrails kept, the errors Trail knows in this repo over 30 days, and the
  * lesson count. Reading only: file reads and stats, no process, no network.
- * The guardrail line has no counts (R62): those are telemetry only.
+ * The guardrail line has no counts (R62): none are kept.
  */
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';

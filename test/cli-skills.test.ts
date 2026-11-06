@@ -50,18 +50,17 @@ function sandbox(tag: string, skills: "on" | "off" = "on"): Home {
   return { home, env, cwd: home };
 }
 
-interface Ran { code: number; out: string[]; err: string; events: Array<[string, Record<string, string>]> }
+interface Ran { code: number; out: string[]; err: string }
 async function trail(h: Pick<Home, "env" | "cwd">, args: string[], person: PersonDeps = PERSON, extraEnv: Record<string, string> = {}): Promise<Ran> {
   const program = new Command();
   const out: string[] = [];
   let err = "";
   let code = 0;
-  const events: Ran["events"] = [];
   program.exitOverride();
   program.configureOutput({ writeOut: (s) => out.push(s.replace(/\n$/, "")), writeErr: (s) => { err += s; } });
   registerSkillCommands(program, {
     env: { ...h.env, ...extraEnv }, cwd: () => h.cwd, personDeps: person,
-    track: (e, p) => events.push([e, p]), out: (l) => out.push(l), err: (l) => { err += `${l}\n`; }, exit: (c) => { code = c; },
+    out: (l) => out.push(l), err: (l) => { err += `${l}\n`; }, exit: (c) => { code = c; },
   });
   try {
     await program.parseAsync(["node", "trail", ...args]);
@@ -69,7 +68,7 @@ async function trail(h: Pick<Home, "env" | "cwd">, args: string[], person: Perso
     if (!(e instanceof CommanderError)) throw e;
     code = e.exitCode;
   }
-  return { code, out, err, events };
+  return { code, out, err };
 }
 
 const settingsText = (h: Home) => {
@@ -145,7 +144,6 @@ test("trail skills offers off: the exact line, skill_answer{off}, and on again b
   assert.equal(off.code, 0);
   assert.deepEqual(off.out, [OFFERS_OFF_LINE]);
   assert.equal(OFFERS_OFF_LINE, "Skill offers are off. Turn them back on: trail skills offers on");
-  assert.deepEqual(off.events, [["skill_answer", { answer: "off" }]]);
   assert.equal(readSettings(h.env).offers, "off");
   assert.equal(readSettings(h.env).offersOffAt, NOW);
   const on = await trail(h, ["skills", "offers", "on"]);
@@ -188,7 +186,6 @@ test("trail skills keep: numbers belong to trail keep; the person keeps a held s
   const kept = await trail(h, ["skills", "keep", "deploy-preview"]);
   assert.equal(kept.code, 0, kept.err);
   assert.deepEqual(kept.out, ["✓ kept deploy-preview as one of your skills · undo: trail forget deploy-preview"]);
-  assert.deepEqual(kept.events, [["skill_saved", { from: "asked", scope: "personal" }]]);
   assert.ok(existsSync(join(h.env.TRAIL_HOME!, "skills", "deploy-preview", "SKILL.md")));
   const again = await trail(h, ["skills", "keep", "deploy-preview"]);
   assert.equal(again.code, 1);
@@ -355,14 +352,12 @@ test("trail skills add: g5's CLI half, its lines and exit code, and skill_saved 
   assert.equal(r.code, 0, r.err);
   assert.match(r.out[0]!, new RegExp(`^✓ saved ${offer.name}, just for you in this repo · 2 steps and its check, each one ran here at 10:00 today$`));
   assert.match(r.out[1]!, /^Tell the person what Trail kept: Saved /);
-  assert.deepEqual(r.events, [["skill_saved", { from: "repeated", scope: "personal" }]]);
   assert.deepEqual(consent.kept(b).skills, [offer.name]);
   // Skills off: the CLI half's own refusal, exit 1, no event.
   writeFileSync(join(b.env.TRAIL_HOME!, "settings.json"), JSON.stringify({ v: 1, skills: "off" }));
   const off = await trail(h, ["skills", "add", "other", "--run", offer.runId]);
   assert.equal(off.code, 1);
   assert.equal(off.err, "Skills are off. Turn them on with: trail skills on\n");
-  assert.deepEqual(off.events, []);
 });
 
 test("trail skills add with any flag but --run is a commander error: nothing saved, nothing sent", async () => {
@@ -376,7 +371,6 @@ test("trail skills add with any flag but --run is a commander error: nothing sav
     assert.equal(r.code, 1, extra.join(" "));
     assert.match(r.err, /^error: /, extra.join(" "));
     assert.deepEqual(r.out, []);
-    assert.deepEqual(r.events, []);
   }
   assert.equal((await trail(h, ["skills", "--json", "add", offer.name, "--run", offer.runId])).code, 1, "a parent's flag before add");
   assert.equal((await trail(h, ["skills", "add", offer.name])).code, 1, "--run is required");

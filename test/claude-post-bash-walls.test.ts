@@ -17,7 +17,6 @@ import { WALL_COPY, wallFixText } from '../src/trace/walls.js';
 import { noteWalls, wallsPath } from '../src/trace/wall-state.js';
 import { writeLesson } from '../src/skills/lessons.js';
 import { at, box, calling, done, one, postBashFailHook, postBashHook, resultOf, session, SHOP, type Box } from './claude-skills-journey-fixtures.js';
-import { allowedValue, EVENTS } from '../src/telemetry/contract.js';
 
 const DOCKER_ERR = 'Exit code 1\n--- FAIL: TestOrders (0.01s)\npanic: rootless Docker not found [recovered]\nFAIL\tacme/shop/orders\t0.412s';
 const GO_TEST = 'go test -tags integration ./...';
@@ -33,18 +32,6 @@ function colimaBox(tag: string, opts: { env?: Record<string, string>; settings?:
   return b;
 }
 const ctxOf = (out: string) => one(out)?.hookSpecificOutput ?? null;
-
-/** Telemetry carries only the contract's keys and values (counts only, R16). */
-function contractOnly(sent: Array<[string, Record<string, string>]>): void {
-  for (const [event, props] of sent) {
-    const keys = EVENTS[event];
-    assert.ok(keys, `not a contract event: ${event}`);
-    for (const [k, v] of Object.entries(props)) {
-      assert.ok(keys.has(k), `${event}.${k} is not in the contract`);
-      assert.ok(allowedValue(event, k, String(v)), `${event}.${k}=${v} is not a contract value`);
-    }
-  }
-}
 
 test('J06 day 1: the docker wall\'s fix is appended to the failed result as information from Trail, and that hook writes no file', async () => {
   const b = colimaBox('walls-j06');
@@ -128,7 +115,6 @@ test('wall_hit carries the class and whether a lesson applies; a lesson that wor
     assert.doesNotMatch(once.out.context ?? '', /What fixed this here before/, 'one epoch is not enough (4.10)');
     noteWalls({ worked: [{ cls: 'docker-rootless', lessonId: id, sh: 'a1b2c3d4e5f6', epoch: 1, d: '2026-10-09' }] }, env);
     const twice = postBashRun(payload, b.repo, env, true);
-    for (const r of [first, once, twice]) contractOnly(r.sent as Array<[string, Record<string, string>]>);
     assert.match(twice.out.context ?? '', /\n\[trail\] What fixed this here before \(a learning this person kept in Trail, worked on Oct 2 and Oct 9\): "rootless Docker not found": colima start/);
   } finally {
     done(b);

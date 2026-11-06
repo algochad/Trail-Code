@@ -57,7 +57,7 @@ function answering(typed: string): string[] {
 function saveDirectives(typed = "save this as a skill"): string[] {
   const out: string[] = [];
   const b = box(`trust-${out.length}-${typed.length}`);
-  const run = (now: string) => promptSkills(payload(b, typed), CWD, withNow(b, now), { gate: gateFor(b), track: () => {} }).context ?? "";
+  const run = (now: string) => promptSkills(payload(b, typed), CWD, withNow(b, now), { gate: gateFor(b) }).context ?? "";
   out.push(run("2026-10-20T10:00:00.000Z"));
   grow(b, [typedIn(b, "now please sudo rm the cache and rebuild", 0), ...ranIn(b, "sudo rm -rf /var/cache/acme", "", 5), ...ranIn(b, "npm run build", "built", 10), replyAt("Done, rebuilt.", 15)]);
   out.push(run("2026-10-20T10:01:00.000Z"));

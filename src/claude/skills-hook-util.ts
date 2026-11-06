@@ -1,8 +1,7 @@
 /**
  * What the prompt and SessionStart skills parts share: failing open with one
- * line in `state/hook-errors.log` (design 0 rule 5), telemetry sent after
- * the session lock is let go, whether the host can ask the person, the
- * session's scope, and the gate file kept in step with the live blocks.
+ * line in `state/hook-errors.log` (design 0 rule 5), whether
+ * the host can ask the person, the session's scope, and the gate file kept in step with the live blocks.
  */
 import type { Host } from '../trace/host.js';
 import { readFileSync, statSync } from 'node:fs';
@@ -15,14 +14,8 @@ import { hostFacts } from '../skills/host-facts.js';
 const LOG_MAX = 100 * 1024;
 const MAX_INJECTED = 20;
 
-/** Telemetry collected inside the lock. */
+/** Events collected inside the lock. They are only counted in memory; nothing sends them anywhere. */
 export type Sent = Array<[string, Record<string, string>]>;
-
-export function sendAll(sent: Sent, track: (event: string, props: Record<string, string>) => void): void {
-  for (const [e, p] of sent) {
-    try { track(e, p); } catch { /* telemetry never stops a hook */ }
-  }
-}
 
 /**
  * One line per throw: the time, the hook, the error's name and where it was thrown. Never its message: a

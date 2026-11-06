@@ -21,7 +21,7 @@ import { at, box, CWD, gateFor, grow, payload, ranIn, replyAt, save, SID, startP
 
 const start = (b: Box, source: string, extra: Record<string, unknown> = {}, env = b.env) =>
   sessionStartSkills(startPayload(b, source, extra), CWD, env, { gate: gateFor(b) });
-const ask = (b: Box, prompt: string, env = b.env) => promptSkills(payload(b, prompt), CWD, env, { gate: gateFor(b), track: () => {} });
+const ask = (b: Box, prompt: string, env = b.env) => promptSkills(payload(b, prompt), CWD, env, { gate: gateFor(b) });
 const webshopRelease = () => releaseSkill({ applies: WEBSHOP, trail: "s-7f3a2c" });
 const HELD_AT = new Date("2026-10-19T18:00:00.000Z");
 

@@ -4,18 +4,13 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   DEFAULT_WIRING_OPTS,
-  UPDATE_TTL_MS,
   compareVersions,
-  formatUpdateNudge,
   formatWiringRefresh,
   isNewer,
-  maybeRefreshInBackground,
-  needsRefresh,
   readStamp,
   reconcileWiring,
   runningVersion,
   stampPath,
-  updateCachePath,
   wiredHostIds,
   wiringOpts,
   writeStamp,
@@ -42,38 +37,6 @@ test('isNewer only fires on a strictly greater candidate', () => {
   assert.equal(isNewer('0.9.0', '0.9.1'), false);
   assert.equal(isNewer(null, '0.9.1'), false); // failed fetch
   assert.equal(isNewer(undefined, '0.9.1'), false); // no cache yet
-});
-
-test('formatUpdateNudge stays silent unless there is something to say', () => {
-  assert.equal(formatUpdateNudge('0.9.1', '0.9.1'), null);
-  assert.equal(formatUpdateNudge('0.9.1', null), null);
-  const line = formatUpdateNudge('0.9.1', '0.11.0');
-  assert.ok(line);
-  assert.match(line, /0\.9\.1 → 0\.11\.0/);
-  assert.match(line, /run `graft upgrade`/);
-  assert.equal(line.split('\n').length, 1, 'one line — this rides in an agent context window');
-});
-
-test('needsRefresh treats a missing or malformed cache as stale', () => {
-  const now = 1_700_000_000_000;
-  assert.equal(needsRefresh(null, now), true);
-  assert.equal(needsRefresh({ latest: '1.0.0', checkedAt: undefined as unknown as number }, now), true);
-  assert.equal(needsRefresh({ latest: '1.0.0', checkedAt: now }, now), false);
-  assert.equal(needsRefresh({ latest: '1.0.0', checkedAt: now - UPDATE_TTL_MS + 1 }, now), false);
-  assert.equal(needsRefresh({ latest: '1.0.0', checkedAt: now - UPDATE_TTL_MS }, now), true);
-});
-
-test('the update cache is machine-global, not per-repo', () => {
-  // One dev with twelve repos should cost the registry one request a day.
-  assert.equal(updateCachePath('/home/dev'), join('/home/dev', '.graft', 'update-check.json'));
-});
-
-test('DO_NOT_TRACK disables the automatic update check', () => {
-  const home = tmpRepo('upkeep-do-not-track');
-  const now = 1_700_000_000_000;
-
-  assert.equal(maybeRefreshInBackground(home, now, { DO_NOT_TRACK: '1' }), false);
-  assert.equal(existsSync(updateCachePath(home)), false, 'a disabled check leaves no attempt stamp');
 });
 
 test('runningVersion resolves this package, not the caller depth', () => {

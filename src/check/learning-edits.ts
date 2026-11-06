@@ -12,7 +12,7 @@ import { basename, join } from "node:path";
 import { noteName, parseNote, type Note } from "../notes/notes.js";
 import { LEARNINGS_DIR } from "../notes/repo-trail.js";
 import type { CheckFinding } from "./types.js";
-import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
+import { plainGit } from "../util/git-args.js";
 
 function show(repo: string, ref: string, path: string): string | null {
   try {

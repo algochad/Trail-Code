@@ -31,7 +31,7 @@ const shipProd = () => shipSkill(
     ] },
 );
 
-const deps = (b: Box): Partial<PromptDeps> => ({ track: () => {}, gate: gateFor(b) });
+const deps = (b: Box): Partial<PromptDeps> => ({ gate: gateFor(b) });
 const ask = (b: Box, prompt: string, iso: string) => promptSkills(payload(b, prompt), CWD, withNow(b, iso), deps(b));
 
 test("only a read-only step makes a check line: a push that is the skill's own step does not; a view, a status API read do", () => {

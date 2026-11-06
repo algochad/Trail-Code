@@ -80,19 +80,6 @@ export function getNpmViewVersion(pkgName: string = PKG_NAME, timeoutMs = 2000):
   }
 }
 
-/** Pure formatter for `graft version` — no I/O, easy to unit-test. */
-export function formatVersionReport(current: string, latest: NpmViewResult): string {
-  const lines = [`${brand()} ${current}`];
-  if (!latest.ok || !latest.version) {
-    lines.push("latest: unreachable (offline?)");
-  } else if (latest.version === current) {
-    lines.push(`latest on npm: ${current} ✓ up to date`);
-  } else {
-    lines.push(`latest on npm: ${latest.version}, run ${brand()} upgrade`);
-  }
-  return lines.join("\n");
-}
-
 /** The global npm node_modules dir (handles Homebrew/Windows/volta layouts). */
 function globalRoot(): string | null {
   try {

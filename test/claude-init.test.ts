@@ -14,13 +14,6 @@ import { readStamp } from '../src/upkeep.js';
 
 function fresh(): string { return mkdtempSync(join(tmpdir(), 'graft-init-')); }
 
-function runPostinstall(env: Record<string, string>): string {
-  try {
-    return execFileSync(process.execPath, ['scripts/postinstall.mjs'],
-      { encoding: 'utf8', env: { ...process.env, ...env } });
-  } catch { return ''; }
-}
-
 test('runInit scaffolds settings + both shims + the skill (build skipped)', () => {
   const d = fresh();
   const r = runInit(d, { build: false, home: fresh() });
@@ -111,24 +104,6 @@ test('runInit appends the allowlist to a pre-existing permissions block, preserv
   runInit(d, { build: false, home: fresh() });
   const s = JSON.parse(readFileSync(join(d, '.claude', 'settings.json'), 'utf8'));
   assert.deepEqual(s.permissions.allow, ['Bash(ls)', 'Bash(trail:*)', 'Bash(graft:*)', 'Bash(npx graft:*)', 'Bash(graft-dev:*)', 'Bash(node dist/cli.js:*)']);
-});
-
-test('postinstall prints the nudge in a fresh dir', () => {
-  const d = fresh();
-  const out = runPostinstall({ INIT_CWD: d, CI: '' });
-  assert.match(out, /npx graft init/);
-});
-
-test('postinstall is silent when already initialized', () => {
-  const d = fresh();
-  runInit(d, { build: false, home: fresh() });
-  const out = runPostinstall({ INIT_CWD: d, CI: '' });
-  assert.equal(out.trim(), '');
-});
-
-test('postinstall is silent under CI', () => {
-  const out = runPostinstall({ INIT_CWD: fresh(), CI: '1' });
-  assert.equal(out.trim(), '');
 });
 
 test('formatInitEpilogue: graph built shows stats, wordmark, and the 3-step list', () => {

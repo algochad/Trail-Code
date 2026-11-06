@@ -1,16 +1,15 @@
 /**
  * The session-start hook's self-maintenance pass, end to end: it must refresh
- * wiring an older graft wrote, surface a cached upgrade nudge, and — critically —
- * never touch the network, because it runs inside Claude Code's hook timeout.
+ * wiring an older graft wrote, and — critically — never touch the network, because
+ * it runs inside Claude Code's hook timeout.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { main } from '../src/claude/hooks.js';
-import { readStamp, runningVersion, updateCachePath } from '../src/upkeep.js';
+import { readStamp, runningVersion } from '../src/upkeep.js';
 import { tmpRepo } from './helpers.js';
-import { timeBar } from './machine-speed.js';
 
 /** A repo that looks like a previous `graft init` ran here, with no stamp — i.e.
  * wired by a graft old enough not to have written one. */
@@ -21,11 +20,11 @@ function wiredRepo(tag: string): string {
   return repo;
 }
 
-/** A fake home carrying a pre-populated update cache, so nothing has to fetch. */
+/** A fake home carrying the update-check file an older version left behind. */
 function homeWithCache(tag: string, latest: string | null, ageMs = 0): string {
   const home = tmpRepo(tag);
   writeFileSync(
-    (mkdirSync(join(home, '.graft'), { recursive: true }), updateCachePath(home)),
+    (mkdirSync(join(home, '.graft'), { recursive: true }), join(home, '.graft', 'update-check.json')),
     JSON.stringify({ latest, checkedAt: Date.now() - ageMs }),
   );
   return home;
@@ -86,30 +85,6 @@ test('session-start says nothing on a second run — the stamp now matches', asy
   assert.doesNotMatch(ctx, /refreshed this repo's agent wiring/);
 });
 
-test('session-start surfaces a cached upgrade nudge', async () => {
-  const repo = wiredRepo('hook-nudge');
-  const ctx = contextOf(await runHook('session-start', repo, homeWithCache('hook-nudge-home', '99.0.0')));
-  assert.match(ctx, /graft .* → 99\.0\.0 available/);
-  assert.match(ctx, /run `graft upgrade`/);
-});
-
-test('an up-to-date install gets no nudge', async () => {
-  const repo = wiredRepo('hook-current');
-  const ctx = contextOf(await runHook('session-start', repo, homeWithCache('hook-current-home', runningVersion())));
-  assert.doesNotMatch(ctx, /available: run/);
-});
-
-test('a stale cache is used as-is: the hook never fetches', async () => {
-  // Two days old — the CLI and the MCP server refresh this, never the hook: a
-  // hook that shelled out to `npm view` would spend its whole timeout on it.
-  const repo = wiredRepo('hook-stale-cache');
-  const home = homeWithCache('hook-stale-home', '99.0.0', 2 * 24 * 60 * 60 * 1000);
-  const before = Date.now();
-  const ctx = contextOf(await runHook('session-start', repo, home));
-  assert.match(ctx, /99\.0\.0 available/, 'stale answer still shown rather than refetched');
-  assert.ok(Date.now() - before < timeBar(2000, 6000), 'no network round trip');
-});
-
 test('an unwired repo is left completely alone', async () => {
   const repo = tmpRepo('hook-unwired');
   const home = homeWithCache('hook-unwired-home', null);
@@ -129,10 +104,13 @@ test('with skills on by default, an unwired repo hears only about skills, and is
   assert.equal(existsSync(join(repo, '.claude')), false, 'never wires a repo that was not wired');
 });
 
-test('a nudge still lands in a wired repo with no graph built yet', async () => {
-  const repo = wiredRepo('hook-nograph');
-  const ctx = contextOf(await runHook('session-start', repo, homeWithCache('hook-nograph-home', '99.0.0')));
-  assert.match(ctx, /99\.0\.0 available/, 'the no-INDEX.md path still reports upkeep');
+test('a leftover update-check cache from an older version never produces a nudge, and nothing refetches it', async () => {
+  const repo = wiredRepo('hook-no-nudge');
+  const home = homeWithCache('hook-no-nudge-home', '99.0.0', 2 * 24 * 60 * 60 * 1000);
+  const before = readFileSync(join(home, '.graft', 'update-check.json'), 'utf8');
+  const ctx = contextOf(await runHook('session-start', repo, home));
+  assert.doesNotMatch(ctx, /99\.0\.0|available: run/);
+  assert.equal(readFileSync(join(home, '.graft', 'update-check.json'), 'utf8'), before, 'the old file is not touched');
 });
 
 test('a repo graft set up, on a machine without trail, hands the agent the trail line once a week', async () => {

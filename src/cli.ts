@@ -30,7 +30,7 @@ import { asksForTrail, brand, cmd, graftNotice, PACKAGE_FOR, setBrand, strandedR
 import { branchDiff } from "./cloud/diff.js";
 import { openBrowser } from "./util/browser.js";
 import { committedAtBase, learningsAtBase, teammateEdits, withBaseLearnings } from "./check/learning-edits.js";
-import { CACHE_DIR, contextDirFor } from "./context/node-file.js";
+import { contextDirFor } from "./context/node-file.js";
 import { loadGraphCached } from "./graph/load.js";
 import { ensureFreshChildren, ensureFreshGraph, refreshNote } from "./graph/refresh.js";
 import { isWorkspaceBuildRoot, readWorkspace } from "./graph/workspace.js";
@@ -56,9 +56,9 @@ import { upsertCodexToml } from "./hosts/mcp-config.js";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { createHash } from "node:crypto";
-import { formatUpgradeReport, formatVersionReport, getNpmViewVersion, readCurrentVersion, readPackageName, runUpgrade } from "./cli-meta.js";
+import { formatUpgradeReport, readCurrentVersion, readPackageName, runUpgrade } from "./cli-meta.js";
 import { nativeFallbackNotice } from "./graph/native.js";
-import { lockHeldByOther, patchBuildConfig, type BuildConfig } from "./util/state.js";
+import { patchBuildConfig, type BuildConfig } from "./util/state.js";
 import { normalizePathPrefix } from "./util/paths.js";
 import { latestSession, formatSessionStats, sessionInputRate } from "./claude/session-metrics.js";
 import { listSessionIds, readSession, sessionDir } from "./claude/state.js";
@@ -101,29 +101,8 @@ import { formatOverlap, maybeRefreshBranches, overlapsWith, pushedWhen, readBran
 import { ensureRepoTrail, LEARNINGS_DIR } from "./notes/repo-trail.js";
 import type { AskResult } from "./ask/ask.js";
 import { setInputRate } from "./context/savings.js";
-import { formatUpdateNudge, maybeRefreshInBackground, readStamp, readUpdateCache, refreshUpdateCache, runningVersion, wiredHostIds, wiringOpts, writeStamp } from "./upkeep.js";
+import { readStamp, runningVersion, wiredHostIds, wiringOpts, writeStamp } from "./upkeep.js";
 import { shouldMoveToTrail } from "./upkeep-run.js";
-import {
-  countBucket,
-  errorCode,
-  filesBucket,
-  durationBucket,
-  formatDebug,
-  formatStatus,
-  firstRunNotice,
-  isTrackedCommand,
-  langsValue,
-  offReason,
-  maybeFlushInBackground,
-  patchState,
-  runFlush,
-  sessionMessagesBucket,
-  sessionSizeBucket,
-  shareItemsBucket,
-  shareSizeBucket,
-  track,
-  trackFirstRunIfNew,
-} from "./telemetry/index.js";
 import { bundleSession, listLines, MAX_GZ_BYTES, pickSession, previewLines, redactedCount, sessionsHere, shareSessionEnabled, shortId, sizeLabel, whoIAm } from "./cloud/share-session.js";
 import { bundlePreviewLines, deleteCode, deleteHash, itemPayload, leaveOut, newCopyDir, newSentState, parseDeleteCode, parseLeaveOut, prepareBundle, readSent, unfinishedCopy, writeSent, type Manifest, type SentState } from "./cloud/share-bundle.js";
 import { trailHome } from "./notes/trail-home.js";
@@ -159,31 +138,13 @@ function grouped(c: Command, heading: string): Command {
   return c;
 }
 
-/**
- * What the `query` telemetry event will say, filled in by the command as it runs
- * and emitted once from the `postAction` hook below.
- *
- * A module-level slot rather than a threaded parameter because the repo root is
- * resolved deep inside each action (`queryRoot`) while the event is emitted
- * centrally — and because a command that calls `process.exit` should simply
- * report nothing, which falls out of never emitting until postAction.
- */
-let queryNote: { repo?: string; hit?: "yes" | "no"; command?: string; notes?: string } = {};
-
-/** Record the repo a query ran against, and pass it straight through so call
+/** Price this session's tokens for a retrieval command, and pass the repo straight through so call
  *  sites stay one line. */
 function noteQuery(dir: string): string {
-  queryNote.repo = dir;
   // Every retrieval command funnels through here, which makes it the one place
   // that can price this session's tokens before a formatter needs the number.
   setInputRate(sessionInputRate(dir));
   return dir;
-}
-
-/** Whether a query found anything. Only the commands that have a result count in
- *  hand call this; the property is simply absent for the others. */
-function noteHit(found: boolean): void {
-  queryNote.hit = found ? "yes" : "no";
 }
 
 program
@@ -301,16 +262,11 @@ function parseTabs(raw: string | undefined): VizTab[] | undefined {
 
 /**
  * Commands that own the upgrade story themselves (`version`, `upgrade`) or must
- * not editorialize on stderr at startup (`mcp` runs its own upkeep at boot, and
- * `_update-check` IS the fetch).
+ * not editorialize on stderr at startup (`mcp` runs its own upkeep at boot).
  */
-const UPKEEP_SKIP = new Set(["version", "upgrade", "_update-check", "mcp"]);
+const UPKEEP_SKIP = new Set(["version", "upgrade", "mcp"]);
 
-/**
- * Every other command: top up the cached registry answer in the background and,
- * if a newer graft is out, say so once on stderr. This is what makes the CLI the
- * cache filler for the hooks, which are not allowed to touch the network.
- */
+/** Every other command: the rename and stranded-repo notices, for a person at a terminal. */
 program.hook("preAction", (_parent, action) => {
   if (UPKEEP_SKIP.has(action.name())) return;
   // Someone typing graft by hand learns its new name, once a day. Agents,
@@ -321,29 +277,6 @@ program.hook("preAction", (_parent, action) => {
   // the one command that moves it (init itself is that command).
   const stranded = action.name() === "init" ? null : strandedRepoNotice({ cwd: process.cwd(), tty: Boolean(process.stderr.isTTY) });
   if (stranded) console.error(stranded);
-  maybeRefreshInBackground();
-  const nudge = formatUpdateNudge(currentVersion, readUpdateCache()?.latest);
-  if (nudge) console.error(nudge);
-  // Telemetry, in the order a user should experience it: disclose first, then
-  // record, then (at most once a day, detached) send. Every step is a no-op in a
-  // fork, in CI, under DO_NOT_TRACK, or after `graft telemetry disable`.
-  const notice = firstRunNotice();
-  if (notice) console.error(notice);
-  trackFirstRunIfNew();
-  maybeFlushInBackground();
-});
-
-/**
- * The `query` event, emitted after the command rather than before it, so it can
- * carry what the query actually did. A command that exits early via
- * `process.exit` never reaches here and is simply not counted — under-reporting
- * is the right failure mode for a metric.
- */
-program.hook("postAction", (_parent, action) => {
-  // `trail build --check` is graft's `check`, and counts as it always has.
-  const name = queryNote.command ?? action.name();
-  if (!isTrackedCommand(name)) return;
-  track("query", { command: name, surface: "cli", hit: queryNote.hit, notes: queryNote.notes }, { repo: queryNote.repo });
 });
 
 /** `graft ask`, `graft build`: a command as graft spells it, whatever ran it. */
@@ -393,22 +326,6 @@ program
     await finishPair(state, resolve(dir), o.resumed ? { resumed: true, waitMs: WAIT_MS } : {});
   });
 
-program
-  .command("_update-check", { hidden: true })
-  .description("internal: refresh the cached latest-version answer")
-  .action(() => {
-    refreshUpdateCache();
-  });
-
-// Hidden for the same reason as _update-check: only ever spawned detached, by
-// maybeFlushInBackground. Running it by hand is harmless — it drains the queue.
-program
-  .command("_telemetry-flush", { hidden: true })
-  .description("internal: POST the queued anonymous usage events")
-  .action(async () => {
-    await runFlush();
-  });
-
 // Hidden: spawned detached by maybeShareSyncInBackground from the session-start
 // hook, once someone has said yes to `share-session`'s keep-sending. By hand it just
 // sends what changed, quietly.
@@ -431,40 +348,12 @@ program
     });
   });
 
-grouped(program.command("telemetry"), GROUP.setup)
-  .description("Show, inspect, or turn off the anonymous usage stats (see TELEMETRY.md)")
-  .argument("[action]", "status (default) | enable | disable | debug", "status")
-  .action((action: string) => {
-    switch (action) {
-      case "status":
-        console.log(formatStatus());
-        return;
-      case "enable":
-        patchState({ enabled: true });
-        console.log(`telemetry: on, anonymous and aggregate-only. \`${cmd("graft telemetry status")}\` for details.`);
-        return;
-      case "disable":
-        // Also stamp the notice as shown: someone who has just opted out should
-        // not be told about telemetry again the next time they run a command.
-        patchState({ enabled: false, noticeShownAt: new Date().toISOString() });
-        console.log("telemetry: off. Nothing further will be recorded or sent.");
-        return;
-      case "debug":
-        console.log(formatDebug());
-        return;
-      default:
-        console.error(`✗ unknown action "${action}": expected status, enable, disable, or debug`);
-        process.exit(1);
-    }
-  });
-
 // Hidden under trail, where -v says the same; listed under graft as it was.
 program
   .command("version", { hidden: TRAIL })
-  .description("Print the installed version and the latest published on npm")
+  .description("Print the installed version")
   .action(() => {
-    const latest = getNpmViewVersion();
-    console.log(formatVersionReport(currentVersion, latest));
+    console.log(`${brand()} ${currentVersion}`);
   });
 
 grouped(program.command("upgrade"), GROUP.setup)
@@ -574,13 +463,10 @@ grouped(program.command("build"), GROUP.setup)
     command: Command,
   ) => {
     if (opts.check) {
-      // The freshness check, which was `graft check`. Counted as `check` so the
-      // metric carries on across the rename; the dir defaults like a query's.
-      queryNote.command = "check";
+      // The freshness check, which was `graft check`; the dir defaults like a query's.
       await runCheckCommand(command.args[0], { extensions: opts.extensions, json: opts.json }, cmd("graft check"));
       return;
     }
-    const buildStartedAt = Date.now();
     if (opts.gitignore === false) process.env.GRAFT_NO_GITIGNORE = "1";
     if (opts.ignore === false) process.env.GRAFT_NO_IGNORE = "1";
     const concurrency = opts.concurrency ? Math.max(1, Number(opts.concurrency)) : undefined;
@@ -671,8 +557,6 @@ grouped(program.command("build"), GROUP.setup)
     // Workspace parent: build each child into its OWN graft/ + a workspace index.
     const buildRoot = resolve(dir);
     const buildGlobalDir = program.opts<GlobalOpts>().dir;
-    // Another build or sync of this map already running as this one starts.
-    const overlap = lockHeldByOther(join(contextDirFor(buildRoot, buildGlobalDir), CACHE_DIR));
     if (isWorkspaceBuildRoot(buildRoot, buildGlobalDir)) {
       await runWorkspaceBuild(buildRoot, {
         deep: !!deep,
@@ -701,10 +585,6 @@ grouped(program.command("build"), GROUP.setup)
           process.stderr.write(
             `\r${phase === "summarize" ? "reading" : "writing"} concepts ${index + 1}/${total}: ${file.slice(0, 40).padEnd(40)}`,
           ),
-      }).catch((err: unknown) => {
-        // Only the stage and a code enum; the message stays on this machine.
-        track("build_failed", { stage: "summarize", code: errorCode(err) }, { repo: buildRoot });
-        throw err;
       });
       process.stderr.write("\n");
       const conceptLine = `concepts: ${c.nodes} nodes, ${c.links} links from ${c.files} files (${c.summarized} read, ${c.cached} cached)`;
@@ -726,9 +606,6 @@ grouped(program.command("build"), GROUP.setup)
         process.stderr.write(
           `\r${phase === "enrich" ? "summarizing" : "parsing"} ${index + 1}/${total}: ${file.slice(0, 50).padEnd(50)}`,
         ),
-    }).catch((err: unknown) => {
-      track("build_failed", { stage: "graph", code: errorCode(err) }, { repo: buildRoot });
-      throw err;
     });
     process.stderr.write("\n");
     console.log(`✓ wiring: ${g.nodes} nodes (${fmt(g.byKind)}), ${g.edges} edges, ${g.cards} cards [${g.languages.join(", ")}]`);
@@ -740,20 +617,6 @@ grouped(program.command("build"), GROUP.setup)
       console.log(`  meaning: ${m.computed} computed, ${m.cached} cached, ${m.stale} stale, ${m.pending} pending`);
     }
     console.log(`  → ${g.contextDir}`);
-    // The activation event. Everything here is a bucket or a fixed label: repo
-    // scale rather than a file count, a language set rather than file names.
-    track(
-      "build_completed",
-      {
-        files_bucket: filesBucket(g.files),
-        langs: langsValue(g.languages),
-        mode: deep ? "deep" : "fast",
-        duration_bucket: durationBucket(Date.now() - buildStartedAt),
-        incremental: String(g.reused > 0),
-        overlap: String(overlap),
-      },
-      { repo: buildRoot },
-    );
     for (const e of g.errors) console.error(`✗ ${e}`);
     // A language whose depth grammar didn't load was parsed by its breadth stand-in:
     // say which, and the install that fixes it. Nothing when everything loaded.
@@ -854,11 +717,8 @@ grouped(program.command("ask"), GROUP.find)
       process.exit(1);
       return;
     }
-    noteHit(r.hits.length > 0);
     // Teammates' branches on the same files, and the learnings shown, counted as a use.
     if (TRAIL) afterAsk(r, dir);
-    // How many notes reached the agent: the demand side of `trail note`.
-    if (r.notesChecked) queryNote.notes = String(Math.min(r.notes?.length ?? 0, 2));
     if (opts.json) {
       console.log(JSON.stringify(r, null, 2));
     } else {
@@ -951,7 +811,7 @@ program
   .action((dirArg: string | undefined, opts: { json?: boolean }) => {
     // Reads local session JSON only — no graph, no network. This is how a Cursor
     // user (no statusline) sees the numbers the Claude Code bar would show, and it
-    // works under DO_NOT_TRACK because it never touches telemetry.
+    // works offline.
     const dir = queryRoot(dirArg);
     const s = latestSession(dir);
     if (opts.json) {
@@ -1383,11 +1243,6 @@ async function runNoteCommand(repo: string, opts: NoteOptions): Promise<void> {
     saved.push(writeNote(t.dir, { title: opts.title, body, author, date, branch: currentBranch(t.dir), cost, touches: t.touches, replaces, src: "agent", ...mark }, scope));
   }
   const touches = targets.flatMap((t) => t.touches);
-  track(
-    "note_saved",
-    { has_cost: String(cost?.tokens !== undefined || cost?.minutes !== undefined), touches_bucket: countBucket(touches.length), scope: saved[0]?.scope ?? scope },
-    { repo },
-  );
 
   if (opts.json) {
     console.log(JSON.stringify(saved.length === 1 ? saved[0] : saved, null, 2));
@@ -1574,36 +1429,21 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
     const autoSel = auto ? autoSelection({ home, repo }) : null;
     const laptop = autoSel?.laptop;
     let ids: string[];
-    // The consent answer from the picker. Undefined everywhere else — a scripted
-    // or flag-driven init never asked, so it must not silently answer.
-    let consent: boolean | undefined;
     if (autoSel) ids = autoSel.repo;
     else if (explicit) ids = explicit;
     else if (opts.allAgents) ids = plan.map((p) => p.id);
     else if (noAgents) ids = ["claude"];
     else if (opts.yes || opts.dryRun) ids = detectedIds;
     else if (process.stdin.isTTY && process.stderr.isTTY) {
-      // Only offer the row when telemetry could actually run. `disabled` still
-      // counts: someone who turned it off should be able to turn it back on here.
-      const reason = offReason();
-      const picked = await runPicker(plan, repo, home, {
-        offerTelemetry: reason === null || reason === "disabled",
-      });
+      const picked = await runPicker(plan, repo, home);
       if (picked === null) {
         console.error("· cancelled, nothing written");
         return null;
       }
       ids = picked.hosts;
-      consent = picked.telemetry;
     } else {
       console.error(formatNonInteractiveHelp(detectedIds));
       return null;
-    }
-
-    // The picker's answer, recorded before anything is wired: a user who
-    // unchecked the row must not have this run's init_completed sent.
-    if (consent !== undefined) {
-      patchState({ enabled: consent, noticeShownAt: new Date().toISOString() });
     }
 
     // Workspace parent: every child repo gets its OWN wiring too. A session
@@ -1936,11 +1776,6 @@ async function runInitCommand(dir: string, opts: InitOptions, progress?: InitPro
         `→ ${teamSaved} team learning${teamSaved === 1 ? "" : "s"} in ${LEARNINGS_DIR}/ ${teamSaved === 1 ? "isn't" : "aren't"} committed yet. Ask the user: "Commit ${teamSaved === 1 ? "it" : `the ${teamSaved}`} so your teammates' Claude starts from ${teamSaved === 1 ? "it" : "them"}? (yes / no)"`,
       );
     // Sorted so `claude,cursor` and `cursor,claude` aggregate as one value.
-    track(
-      "init_completed",
-      { agents: [...ids].sort().join(","), consent: consent === undefined ? "unasked" : String(consent) },
-      { repo },
-    );
     return { ids, laptop: laptop ?? ids };
 }
 
@@ -1984,7 +1819,6 @@ async function runConnectInit(dir: string, opts: InitOptions): Promise<void> {
     // A sign-in link out from before is moot now.
     clearPending();
     console.error(`✓ connected to workspace ${cloud.workspace.name}`);
-    track("brain_signup_settled", { outcome: "linked", mode: "connect", duration_bucket: durationBucket(0) }, { repo });
   } else if (got.reason === "invalid") {
     console.error(`✗ ${got.error} · get a new code at ${base}/welcome/code`);
     process.exitCode = 1;
@@ -2529,7 +2363,6 @@ async function shareOneSession(cloud: Cloud, pick: string, yes: boolean, checkou
     process.exitCode = 1;
     return;
   }
-  track("session_shared", { size_bucket: sessionSizeBucket(bundle.bytes), messages_bucket: sessionMessagesBucket(bundle.messages) }, { repo: checkout });
   console.error(`✓ sent ${shortId(session)} to the Trail team (${sizeLabel(bundle.gz.length)}) · thank you: it goes into the team-memory experiment`);
   console.error(`· take it back any time: ${cmd("graft share-session")} --delete ${deleteCode(s)}`);
 }
@@ -2596,7 +2429,6 @@ async function shareWholeClaude(cloud: Cloud, opts: { days: number; leaveOut?: s
   }
   const declined = () => {
     rmSync(out, { recursive: true, force: true });
-    track("share_bundle", { outcome: "declined", items_bucket: shareItemsBucket(m.items.length), size_bucket: shareSizeBucket(bundleGz(m)) }, { repo: checkout });
     console.error("· nothing sent, and the copy is deleted");
   };
   const all = opts.sync ? "Send all of this, and keep sending?" : "Send all of this?";
@@ -2658,7 +2490,6 @@ async function sendCopy(cloud: Cloud, dir: string, m: Manifest, sent: SentState,
   sent.finishedAt = Date.now();
   writeSent(dir, sent);
   const gz = bundleGz(m);
-  track("share_bundle", { outcome: m.dropped.length ? "partial" : "sent", items_bucket: shareItemsBucket(total), size_bucket: shareSizeBucket(gz) }, { repo: checkout });
   console.error(`✓ sent your Claude to the Trail team: ${total} item${total === 1 ? "" : "s"}, ${sizeLabel(gz)} · thank you, it goes into the team-memory experiment`);
   if (sync) {
     const setup = readFileSync(join(dir, "setup.json"), "utf8");
@@ -2722,7 +2553,6 @@ function stopSync(checkout: string): void {
     return;
   }
   writeSyncState({ ...s, stoppedAt: Date.now() });
-  track("share_bundle", { outcome: "stopped", items_bucket: shareItemsBucket(Object.keys(s.sessions).length + 1) }, { repo: checkout });
   console.error("✓ stopped: nothing more is sent");
   const hook = hookLine(removeShareSyncHook(homedir()));
   if (hook) console.error(hook);
@@ -2757,7 +2587,6 @@ async function deleteShared(cloud: Cloud, code: string, checkout: string): Promi
     writeSyncState({ ...on, stoppedAt: Date.now() });
     removeShareSyncHook(homedir());
   }
-  track("share_bundle", { outcome: "deleted", items_bucket: shareItemsBucket(r.deleted) }, { repo: checkout });
   console.error(`✓ deleted ${r.deleted} item${r.deleted === 1 ? "" : "s"} from the Trail team`);
 }
 
@@ -3216,7 +3045,7 @@ if (TRAIL) {
   program.addCommand(statusCommand().helpGroup(GROUP.setup));
 
   // Help lists the groups in this order, and the commands within each.
-  const order = ["ask", "grep", "skeleton", "callers", "map", "note", "check", "team", "skills", "init", "build", "status", "upgrade", "uninstall", "telemetry", "workspace", "login", "logout", "blast"];
+  const order = ["ask", "grep", "skeleton", "callers", "map", "note", "check", "team", "skills", "init", "build", "status", "upgrade", "uninstall", "workspace", "login", "logout", "blast"];
   const rank = (c: Command) => {
     const i = order.indexOf(c.name());
     return i === -1 ? order.length : i;
@@ -3237,7 +3066,6 @@ if (TRAIL) {
     status: "code map, learnings and tokens saved",
     upgrade: "install the latest trail",
     uninstall: "remove everything trail or graft wrote to this repo",
-    telemetry: "show or turn off the anonymous usage stats",
     check: "check your diff against this repo's learnings and yours",
     team: "what the team learned this week, and where work overlaps",
     workspace: "your workspace's repos, team page and invite link",

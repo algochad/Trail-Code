@@ -69,7 +69,7 @@ test("noteCorrectionLine: of several lines with the sha in one fold, the newest 
 test("4.14 step 1 wired: the prompt hook that sees the correction fills its offset from the person's line it just folded", () => {
   const b = box("b3rev-wire");
   save(b, releaseSkill({ applies: WEBSHOP, trail: ID, asks: `publish, ${PHRASE}` }));
-  const run = (prompt: string, env = b.env) => promptSkills(payload(b, prompt), CWD, env, { track: () => {}, gate: gateFor(b) });
+  const run = (prompt: string, env = b.env) => promptSkills(payload(b, prompt), CWD, env, { gate: gateFor(b) });
   run("can you pull and publish 1.4.2");
   grow(b, [
     typedIn(b, "can you pull and publish 1.4.2", 0),

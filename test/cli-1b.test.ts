@@ -56,7 +56,7 @@ async function trail(h: Pick<Home, "env" | "cwd">, args: string[], person: Perso
   program.configureOutput({ writeOut: (s) => out.push(s.replace(/\n$/, "")), writeErr: (s) => { err += s; } });
   registerSkillCommands(program, {
     env: h.env, cwd: () => h.cwd, personDeps: person,
-    track: () => undefined, out: (l) => out.push(l), err: (l) => { err += `${l}\n`; }, exit: (c) => { code = c; },
+    out: (l) => out.push(l), err: (l) => { err += `${l}\n`; }, exit: (c) => { code = c; },
   });
   try {
     await program.parseAsync(["node", "trail", ...args]);

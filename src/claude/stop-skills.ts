@@ -48,7 +48,7 @@ export function stopSkills(input: any, dir: string, env: NodeJS.ProcessEnv = pro
   return stopSkillsRun(input, dir, env).out;
 }
 
-/** 3.5, with the telemetry it collected inside the lock, for the caller to send after it. */
+/** 3.5, with the events it collected inside the lock. */
 export function stopSkillsRun(input: any, dir: string, env: NodeJS.ProcessEnv = process.env): StopResult {
   const sent: Sent = [];
   try {

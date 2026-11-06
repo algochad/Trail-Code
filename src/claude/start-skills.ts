@@ -72,7 +72,7 @@ export function sessionStartSkills(input: any, dir: string, env: NodeJS.ProcessE
   return sessionStartSkillsRun(input, dir, env, deps).out;
 }
 
-/** 3.1, with the telemetry it collected (1b's `skill_stale`), for the caller to send after it. */
+/** 3.1, with the events it collected (1b's `skill_stale`). */
 export function sessionStartSkillsRun(input: any, dir: string, env: NodeJS.ProcessEnv = process.env, deps: Partial<StartDeps> = {}): { out: HookOut; sent: Sent } {
   const sent: Sent = [];
   try {

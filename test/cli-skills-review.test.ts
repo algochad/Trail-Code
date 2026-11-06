@@ -28,7 +28,7 @@ async function trail(env: NodeJS.ProcessEnv, cwd: string, args: string[]): Promi
   program.configureOutput({ writeOut: (t) => out.push(t), writeErr: (t) => { err += t; } });
   registerSkillCommands(program, {
     env: { ...env, CLAUDECODE: "1" }, cwd: () => cwd, personDeps: { stdinTTY: false, stdoutTTY: false, ps: () => null },
-    track: () => {}, out: (l) => out.push(l), err: (l) => { err += `${l}\n`; }, exit: (c) => { code = c; },
+    out: (l) => out.push(l), err: (l) => { err += `${l}\n`; }, exit: (c) => { code = c; },
   });
   try {
     await program.parseAsync(["node", "trail", ...args]);

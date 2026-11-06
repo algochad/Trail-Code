@@ -25,7 +25,6 @@ import { isCorrection, isSaveRequest, scopeWords, typedPrompt, typedSha } from '
 import { currentRun, injectedThisEpoch, skillsGate, withSkillSession, type GateCtx } from '../trace/skill-session.js';
 import { lastGoodRun } from '../trace/run-verdict.js';
 import { findPriorSheet, readRunSheet, type FoldResult } from '../trace/runs.js';
-import { track } from '../telemetry/track.js';
 import { creditWindow, noteCorrectionLine, settleCredit, type Fired } from '../skills/credit.js';
 import { compileRun } from '../skills/compile.js';
 import { refusalWords } from '../skills/compile-words.js';
@@ -38,7 +37,7 @@ import { checkLine, injectionFor, readOnlyCheck, runBlock, runProbes, useNotice,
 import { flatLine } from '../notes/flatten.js';
 import { directive } from '../skills/directive-words.js';
 import { consent as g5consent, type Consent } from './prompt-consent.js';
-import { canAsk, hookError, scopeKeys, sendAll, syncGate, trimInjected, type Sent } from './skills-hook-util.js';
+import { canAsk, hookError, scopeKeys, syncGate, trimInjected, type Sent } from './skills-hook-util.js';
 import { runCheckout } from '../skills/run-checkout.js';
 import { lastResult, lastResultLine } from '../skills/check-result.js';
 import { noteCodexPrompt } from '../trace/codex.js';
@@ -55,10 +54,9 @@ const LOCK_WAIT_MS = 150;
 const LIVE_MS = 2 * 60 * 60 * 1000;
 const MAX_ASK_WORDS = 25;
 
-/** What tests swap: g5's two calls, telemetry, the gate (a temp folder reads as scratch), the probes' git, the deadline's clock. */
+/** What tests swap: g5's two calls, the gate (a temp folder reads as scratch), the probes' git, the deadline's clock. */
 export interface PromptDeps {
   consent: Consent;
-  track: (event: string, props: Record<string, string>) => void;
   gate: (input: unknown, dir: string, env?: NodeJS.ProcessEnv) => ReturnType<typeof skillsGate>;
   probes: ProbeOpts;
   clock: () => number;
@@ -66,7 +64,7 @@ export interface PromptDeps {
   shown: () => ReadonlySet<string>;
 }
 
-/** The telemetry answer for each class g5 reports (stale and not-shown were never answered: nothing is sent). */
+/** The answer recorded for each class g5 reports (stale and not-shown were never answered). */
 const ANSWERED: Record<string, string> = { yes: 'yes', show: 'show', no: 'no', other: 'none', retire: 'retire' };
 
 /** 3.2. */
@@ -82,7 +80,6 @@ export function promptSkills(input: any, dir: string, env: NodeJS.ProcessEnv = p
     if (!typed) return {};
     const d: PromptDeps = {
       consent: deps.consent ?? g5consent,
-      track: deps.track ?? ((e, p) => track(e, p, { env: ctx.env, ...(ctx.checkout ? { repo: ctx.checkout } : {}) })),
       gate: deps.gate ?? skillsGate,
       probes: deps.probes ?? {},
       clock,
@@ -100,7 +97,6 @@ export function promptSkills(input: any, dir: string, env: NodeJS.ProcessEnv = p
     } : undefined;
     const out = withSkillSession(ctx, { catchUp: ctx.fold, waitMs: LOCK_WAIT_MS, ...(prepare ? { prepare } : {}) },
       (st, fold) => (own ? {} : inside(ctx, st, fold, typed, d, deadline, sent)));
-    sendAll(sent, d.track);
     return out ?? {};
   } catch (e) {
     hookError('prompt', e, env);

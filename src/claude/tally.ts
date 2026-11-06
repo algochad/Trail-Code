@@ -13,8 +13,7 @@
  * The assistant's own prose exists in exactly one place a hook can reach: the
  * host's transcript JSONL, named on the Stop hook's stdin as `transcript_path`.
  * So this reads that file — locally, at turn end, for a boolean. Nothing out of
- * it is stored or sent; the session keeps a count and the telemetry contract
- * carries that count as a bucket. See TELEMETRY.md.
+ * it is stored or sent; the session keeps a count.
  *
  * Only what the transcript gained since the last Stop is read (a transcript
  * grows for the life of a session; a real one passed 233 MB), through the

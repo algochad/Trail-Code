@@ -11,7 +11,6 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpRepo } from "./helpers.js";
-import { VALUES } from "../src/telemetry/contract.js";
 import { HOST_FACTS, hostFacts } from "../src/skills/host-facts.js";
 import { WALL_CLASSES } from "../src/notes/learning-fields.js";
 import { offerEndsReply } from "../src/skills/offer-moment.js";
@@ -83,7 +82,6 @@ const literals = (decl: string) => [...decl.matchAll(/'([^']+)'/g)].map((m) => m
 
 test("trace/types.ts: the 1b types with exactly the design's fields", () => {
   const text = read("trace/types.ts");
-  assert.deepEqual(literals(declarations(text, "WallClass")[0]!), [...VALUES.wall_hit!.class!], "WallClass equals telemetry's wall_hit.class");
   assert.deepEqual(literals(declarations(text, "FixDeltaKind")[0]!), ["env", "flag", "wrapper", "enable-step"]);
   assert.deepEqual(fields(declarations(text, "FixDelta")[0]!), ["kind", "name", "text", "callId"]);
   assert.deepEqual(fields(declarations(text, "RepairEvent")[0]!), ["cls", "program", "failCallId", "fixCallId", "delta", "epoch", "runId", "at"]);
@@ -165,8 +163,7 @@ test("the 1b type files stay types only", () => {
   }
 });
 
-test("WALL_CLASSES (the runtime list) equals WallClass and telemetry's wall_hit.class, in table order", () => {
-  assert.deepEqual([...WALL_CLASSES], [...VALUES.wall_hit!.class!]);
+test("WALL_CLASSES (the runtime list) equals WallClass, in table order", () => {
   assert.deepEqual([...WALL_CLASSES], literals(declarations(read("trace/types.ts"), "WallClass")[0]!));
 });
 

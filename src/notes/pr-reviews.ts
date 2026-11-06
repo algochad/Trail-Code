@@ -21,8 +21,6 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { countBucket, durationBucket } from "../telemetry/contract.js";
-import { track } from "../telemetry/track.js";
 import { readJson, writeJsonAtomic } from "../util/state.js";
 import { existsSync, readdirSync } from "node:fs";
 import { BAR, LEARNING_SCHEMA, learningBody, verifyLearnings } from "../learn/bar.js";
@@ -32,7 +30,7 @@ import { noteAuthor } from "./git-facts.js";
 import { ensureRepoHome } from "./home.js";
 import { listNotes, shortDate, writeNote, type Note } from "./notes.js";
 import { alreadySaid, codeAnchors, knownText } from "./team-check.js";
-import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
+import { GIT_PLAIN_CONFIG } from "../util/git-args.js";
 
 /** One merged or closed PR with what was said on it, oldest comment first. */
 export interface ReviewedPR {
@@ -444,10 +442,7 @@ export function beginReviewRead(repo: string, env: NodeJS.ProcessEnv = process.e
     if (env.TRAIL_NO_FETCH === "1" || readJson<{ at?: number }>(readMark(repo))?.at) return null;
     // The same reviews give a teammate the same findings: once is enough for the repo.
     if (listNotes(repo, { branches: false }).some((n) => n.scope === "repo" && FLAGGED.test(n.body))) return null;
-    if (!ghReady(repo, gh)) {
-      track("cold_start", { source: "reviews", outcome: "no_gh" }, { repo });
-      return null;
-    }
+    if (!ghReady(repo, gh)) return null;
     const read: ReviewRead = { started: Date.now(), done: false, result: findReviewLearnings(repo, { gh, ...(capMs === undefined ? {} : { capMs }), ...(onLearning ? { onLearning } : {}) }) };
     void read.result.then(() => (read.done = true));
     return read;
@@ -559,19 +554,5 @@ export async function finishReviewRead(
   const saved = kept.length ? saveReviewFindings(repo, kept) : [];
   const outcome = chosen === null ? "cancelled" : findings.length ? "found" : result.findings.length ? "none_anchored" : (result.reason ?? "none_found");
   if (outcome === "found" || outcome === "none_found" || outcome === "none_anchored") writeJsonAtomic(readMark(repo), { at: Date.now(), model: result.model, saved: saved.length, ms: result.durationMs, ...(result.costUsd === undefined ? {} : { costUsd: result.costUsd }) }, true);
-  track(
-    "cold_start",
-    {
-      source: "reviews",
-      outcome,
-      reviews_bucket: countBucket(result.reviewed),
-      offered_bucket: countBucket(findings.length),
-      filtered_bucket: countBucket(result.findings.length - findings.length),
-      picked_bucket: countBucket(saved.length),
-      duration_bucket: durationBucket(result.durationMs),
-      model: result.model,
-    },
-    { repo },
-  );
   return { result, saved, kept, cancelled: chosen === null };
 }

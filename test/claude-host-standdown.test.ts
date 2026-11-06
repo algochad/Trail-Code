@@ -143,17 +143,3 @@ test('under Copilot the prompt hook keeps its session under its own id, not a sh
   assert.equal(existsSync(join(repo, '.trail', 'cache', '.cache', 'session', 'cp-1.json')), true);
   assert.equal(existsSync(join(repo, '.trail', 'cache', '.cache', 'session', 'default.json')), false);
 });
-
-test('a tool use is put down to the host that sent it, so a session summary names Copilot or Cursor, not Claude Code', async () => {
-  process.env.TRAIL_HOME = tmpRepo('standdown-trail-home-3');
-  const repo = tmpRepo('standdown-host-stamp');
-  const { readSession } = await import('../src/claude/state.js');
-  const use = { tool_name: 'Bash', tool_input: { command: 'trail ask "cart total"' }, tool_response: '[graft] tokens saved ≈ 4,000' };
-  const copilotSnake = { ...COPILOT_PASCAL, session_id: 'cp-9', hook_event_name: 'PostToolUse', ...use };
-  const cursorShape = { ...CURSOR, conversation_id: 'c-9', hook_event_name: 'postToolUse', ...use };
-  const claudeShape = { ...CLAUDE, session_id: 's-9', hook_event_name: 'PostToolUse', ...use };
-  for (const payload of [copilotSnake, cursorShape, claudeShape]) await asRepoCopy(repo, tmpRepo('standdown-empty-home-3'), payload, () => hooksMain('tool-savings'));
-  assert.equal(readSession(repo, 'cp-9').host, 'copilot');
-  assert.equal(readSession(repo, 'c-9').host, 'cursor');
-  assert.equal(readSession(repo, 's-9').host, 'claude-code');
-});

@@ -135,7 +135,7 @@ test("g6's prompt hook passes the compiled skill's sha to noteSaveRequest", () =
     ...ranIn(b, "npm view acme-cli version", "1.4.3", 20), replyAt("Published 1.4.3: npm shows it.", 25),
     typedIn(b, "save this as a skill", 70),
   ]);
-  const out = promptSkills(payload(b, "save this as a skill"), CWD, withNow(b, "2026-10-20T10:01:11.000Z"), { track: () => {}, gate: gateFor(b) });
+  const out = promptSkills(payload(b, "save this as a skill"), CWD, withNow(b, "2026-10-20T10:01:11.000Z"), { gate: gateFor(b) });
   assert.match(out.context ?? "", /trail skills add [a-z0-9-]+ --run r-/);
   const st = stateOf(b);
   const sr = st.saveRequest!;
@@ -155,7 +155,7 @@ function realAsk(b: Box, sec: number, words: string): string {
     const g = skillsGate(input, dir, env);
     return g.ok ? { ok: true as const, ctx: { ...g.ctx, checkout: b.repo, repoKey: SHOP } } : g;
   };
-  const out = promptSkills({ ...b.payload, hook_event_name: "UserPromptSubmit", prompt: words }, "/home/dev/shop", { ...b.env, TRAIL_TEST_NOW: iso(sec) }, { track: () => {}, gate });
+  const out = promptSkills({ ...b.payload, hook_event_name: "UserPromptSubmit", prompt: words }, "/home/dev/shop", { ...b.env, TRAIL_TEST_NOW: iso(sec) }, { gate });
   const m = /trail skills add ([a-z0-9-]+) --run (r-[\w-]+)/.exec(out.context ?? "");
   assert.ok(m, out.context);
   assert.ok(state(b).saveRequest?.skillSha, "the hook recorded the sha");

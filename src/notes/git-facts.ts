@@ -5,7 +5,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { userInfo } from "node:os";
-import { plainGit, GIT_PLAIN_CONFIG } from "../util/git-args.js";
+import { plainGit } from "../util/git-args.js";
 
 /** git's stdout, trimmed unless `raw` (porcelain status starts lines with a meaningful space). */
 function git(repo: string, args: string[], raw = false): string | null {

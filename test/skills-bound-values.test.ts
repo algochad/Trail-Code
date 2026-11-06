@@ -15,7 +15,7 @@ import { box, CWD, gateFor, grow, payload, ranIn, replyAt, save, stateOf, typedI
 const PKG = `$(node -p "require('./package.json').version")`;
 /** The release skill with the lab's default: the version package.json holds. */
 const release = () => releaseSkill({ applies: WEBSHOP, params: `version=${PKG}` }, { params: [{ name: "version", shape: "version", default: PKG, seen: ["1.4.1"] }] });
-const deps = (b: Box): Partial<PromptDeps> => ({ track: () => {}, gate: gateFor(b) });
+const deps = (b: Box): Partial<PromptDeps> => ({ gate: gateFor(b) });
 const ask = (b: Box, prompt: string, iso: string) => promptSkills(payload(b, prompt), CWD, withNow(b, iso), deps(b));
 const LATER = "leave the two config files as they are and carry on with the pull and the publish";
 

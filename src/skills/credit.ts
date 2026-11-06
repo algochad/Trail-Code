@@ -173,7 +173,7 @@ function trimCredit(st: SkillSessionState): void {
 
 /**
  * Credits every block with a run (any epoch: a compaction may have closed it), and flushes each use that is done.
- * Changes `st.credit` and, on a passed check, the blocks' `live`. Returns the uses flushed now, for telemetry
+ * Changes `st.credit` and, on a passed check, the blocks' `live`. Returns the uses flushed now
  * `skill_used{outcome}` and the Stop use line.
  */
 export function settleCredit(st: SkillSessionState, ctx: SettleCtx): Settled[] {

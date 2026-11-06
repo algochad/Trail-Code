@@ -34,8 +34,6 @@ import { savePersonal } from '../skills/store.js';
 import { stepsTotal } from '../skills/store-fs.js';
 import type { KeepReceipt, Receipt } from '../skills/types.js';
 import { trailPath, withLock, writePrivate } from '../util/private-fs.js';
-import { initKindCounts } from '../telemetry/contract.js';
-import { track } from '../telemetry/track.js';
 import { WALLS } from '../trace/walls.js';
 import { readInitRecord, updateInitRecord, type KeptName, type PendingItem } from './init-record.js';
 import { keepArgs, parseKeepAnswer, replyNamesList, withinAnswer } from './keep-answer.js';
@@ -111,7 +109,6 @@ function keepSkill(item: InitItem, how: 'tty' | 'yes' | 'keep', place: KeepPlace
   }
   try {
     const ref = savePersonal(compiled, { from: 'init', runId: compiled.source.runId, consent: 'init', stepsVerified: stepsTotal(compiled), env, now });
-    track('skill_saved', { from: 'init', scope: 'personal' });
     return { id: ref.id, name: compiled.name, steps: compiled.steps.map((s) => s.cmd) };
   } catch (e) {
     return e instanceof Error && /name|taken|exists/i.test(e.message) ? 'taken' : 'failed';
@@ -247,7 +244,6 @@ export function keepItems(picked: InitItem[], all: InitItem[], how: 'tty' | 'yes
       }
     }, env);
   }
-  track('cold_start', { source: how === 'keep' ? 'keep' : 'sessions', outcome: 'kept', ...initKindCounts('kept', kept) });
   return { kept, notKept, refused, ...(folded.length ? { folded } : {}) };
 }
 

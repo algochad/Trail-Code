@@ -12,10 +12,7 @@ import { repoWiredForTrail, setBrand, trailOnPath } from './brand.js';
 import { ensureRepoHome } from './notes/home.js';
 import { ensureRepoTrail } from './notes/repo-trail.js';
 import {
-  formatUpdateNudge,
   formatWiringRefresh,
-  maybeRefreshInBackground,
-  readUpdateCache,
   reconcileWiring,
   wiredHostIds,
   type WiringOpts,
@@ -79,13 +76,10 @@ export function shouldMoveToTrail(repo: string, env: NodeJS.ProcessEnv = process
 /**
  * @param repo    the project dir
  * @param current the running graft's version
- * @param opts.background  false in hook contexts: read the update cache, never
- *   spawn a fetch. Hooks run under a hard timeout and must stay off the network.
  */
 export function runUpkeep(
   repo: string,
   current: string,
-  opts: { background?: boolean; home?: string } = {},
 ): UpkeepResult {
   const lines: string[] = [];
   try {
@@ -93,10 +87,5 @@ export function runUpkeep(
     const refreshLine = formatWiringRefresh(refreshed);
     if (refreshLine) lines.push(refreshLine);
   } catch { /* fail-soft: wiring refresh is never worth breaking a session for */ }
-  try {
-    if (opts.background !== false) maybeRefreshInBackground(opts.home);
-    const nudge = formatUpdateNudge(current, readUpdateCache(opts.home)?.latest);
-    if (nudge) lines.push(nudge);
-  } catch { /* same */ }
   return { lines };
 }

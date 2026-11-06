@@ -49,21 +49,20 @@ function seed(b: Box): void {
   noteValue(SHOP, { guardrailStops: 2 }, b.env, new Date("2026-10-20T10:00:00.000Z"));
 }
 
-async function trail(b: Box, args: string[]): Promise<{ code: number; out: string[]; sent: Array<[string, Record<string, string>]> }> {
+async function trail(b: Box, args: string[]): Promise<{ code: number; out: string[] }> {
   const program = new Command();
   const out: string[] = [];
-  const sent: Array<[string, Record<string, string>]> = [];
   let code = 0;
   program.exitOverride();
   program.configureOutput({ writeOut: () => undefined, writeErr: () => undefined });
-  registerSkillCommands(program, { env: b.env, cwd: () => b.checkout, track: (e, p) => sent.push([e, p]), out: (l) => out.push(l), err: () => undefined, exit: (c) => { code = c; } });
+  registerSkillCommands(program, { env: b.env, cwd: () => b.checkout, out: (l) => out.push(l), err: () => undefined, exit: (c) => { code = c; } });
   try {
     await program.parseAsync(["node", "trail", ...args]);
   } catch (e) {
     if (!(e instanceof CommanderError)) throw e;
     code = e.exitCode;
   }
-  return { code, out, sent };
+  return { code, out };
 }
 
 const LINE = "Last week in this repo, on this machine: release-npm ran 2 times, 0 failed commands in all; the timeout learning stopped 2 commands.";
@@ -75,7 +74,6 @@ test("trail skills: the value line is on top, and skill_value{list} says it went
   assert.equal(r.code, 0);
   assert.equal(r.out[0], LINE);
   assert.match(r.out[1] ?? "", /^release-npm/);
-  assert.deepEqual(r.sent.filter(([e]) => e === "skill_value"), [["skill_value", { channel: "list" }]]);
 });
 
 test("trail skills: any day, even the week SessionStart already said it", async () => {
@@ -90,7 +88,6 @@ test("trail skills --json carries the line as value", async () => {
   seed(b);
   const r = await trail(b, ["skills", "--json"]);
   assert.equal(JSON.parse(r.out.join("\n")).value, LINE);
-  assert.deepEqual(r.sent.filter(([e]) => e === "skill_value"), [["skill_value", { channel: "list" }]]);
 });
 
 test("trail skills: no value line in the first week, with skills off, outside a repo, or with nothing to say; no skill_value then", async () => {
@@ -101,7 +98,6 @@ test("trail skills: no value line in the first week, with skills off, outside a 
     seed(b);
     const r = await trail(b, ["skills"]);
     assert.ok(!r.out.some((l) => l.startsWith("Last week")), `${tag}: ${r.out.join("\n")}`);
-    assert.deepEqual(r.sent.filter(([e]) => e === "skill_value"), [], tag);
   }
   const outside = box("outside");
   seed(outside);
@@ -110,7 +106,6 @@ test("trail skills: no value line in the first week, with skills off, outside a 
   const quiet = box("quiet");
   const q = await trail(quiet, ["skills"]);
   assert.equal(q.out[0], "no skills yet");
-  assert.deepEqual(q.sent.filter(([e]) => e === "skill_value"), []);
 });
 
 test("trail skills --json keeps one shape: value is null, never missing, when skills are off, in the first week or outside a repo (c5 review)", async () => {

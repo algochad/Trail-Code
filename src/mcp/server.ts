@@ -9,27 +9,11 @@ import { hasGraftIndex } from '../graph/root.js';
 import { mainWorktreeRoot } from '../graph/seed.js';
 import { runUpkeep } from '../upkeep-run.js';
 import { runningVersion } from '../upkeep.js';
-import { maybeFlushInBackground, track } from '../telemetry/index.js';
 import { brand, inBrand } from '../brand.js';
 import { canonicalToolName, GRAFT_MCP_TOOL_NAMES } from './tool-names.js';
 import { WorkspaceConnector, type RemotePrompt, type RemoteTool } from './connector.js';
 import { teamLine, teamWorkspace } from '../cloud/team-file.js';
 import { KeptListing, within } from './kept-listing.js';
-
-/**
- * MCP tool name → the command enum the telemetry contract knows. A tool absent
- * here is simply not counted: `track` would drop an unlisted command anyway, and
- * mapping by hand keeps the wire vocabulary identical across the CLI and MCP so
- * `ask` means the same thing in both.
- */
-const TOOL_COMMAND: Record<string, string> = {
-  graft_find_code: 'ask',
-  graft_find_all: 'grep',
-  graft_trace_calls: 'callers',
-  graft_file_api: 'skeleton',
-  graft_repo_map: 'map',
-  graft_check_freshness: 'check',
-};
 
 /**
  * How long the client waits on the workspace, counted once from boot: for
@@ -111,15 +95,6 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
   // put them. Never blocks: the registry fetch happens in a detached child.
   const upkeep = brainsOnly ? [] : runUpkeep(root, runningVersion()).lines;
   for (const line of upkeep) console.error(line);
-  // Same deal for the telemetry queue: flushed from a detached child at boot, so
-  // a Cursor user who never touches the CLI still gets their events out.
-  //
-  // Deliberately NOT the first-run notice. This server's stderr goes to an editor
-  // log nobody reads, so printing it here would mark the disclosure as shown
-  // without anyone having seen it. It stays pending for the next CLI command,
-  // and `graft init`'s picker is the channel that reached this user already.
-  if (!brainsOnly) maybeFlushInBackground();
-
   // The workspace's own MCP server, when this machine is paired with one:
   // started now, so its instructions are in hand by the time the client asks.
   const workspace = new WorkspaceConnector({ version, cwd: root });
@@ -232,14 +207,6 @@ export function startMcpServer(root: string, dirOverride?: string, version = '0'
         // than an unhandled rejection that kills the server.
         callTool(root, name, args, dirOverride).then(
           (r) => {
-            // No `hit`: `isError` means the tool failed, which is not the same
-            // question as "did the graph have an answer". Absent beats wrong.
-            // hasOwn for the same reason as track()'s: a client is free to send
-            // `{"name":"constructor"}`, and a plain lookup would hand `track` a
-            // function rather than undefined.
-            const canonical = canonicalToolName(name);
-            const command = Object.hasOwn(TOOL_COMMAND, canonical) ? TOOL_COMMAND[canonical] : undefined;
-            track('query', { command, surface: 'mcp' }, { repo: root, host: 'mcp' });
             reply(id, { content: [{ type: 'text', text: r.text }], isError: r.isError });
           },
           (err) => replyError(id, -32603, err instanceof Error ? err.message : String(err)),

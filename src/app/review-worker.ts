@@ -13,8 +13,7 @@
  *    URLs are keyed on live with the HTTP server, and a page is only useful to the
  *    process that will serve it.
  *
- * Deliberately no `graft` state of its own: no lock, no cache directory, no
- * telemetry. A review works on a throwaway clone in /tmp and takes its findings
+ * Deliberately no `graft` state of its own: no lock, no cache directory. A review works on a throwaway clone in /tmp and takes its findings
  * with it when it exits.
  */
 import { reviewPullRequest } from "./review.js";

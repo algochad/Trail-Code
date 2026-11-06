@@ -6,7 +6,7 @@
  * to hooks.js, and this file imports nothing at load time: node:fs comes from
  * `process.getBuiltinModule` (an ESM `import ... from 'node:fs'` alone costs
  * Node several ms), and hook-layers.ts is loaded only when there is a decision
- * to send. None of the graph, telemetry and learnings code the other hooks
+ * to send. None of the graph and learnings code the other hooks
  * share. It fails open: bad stdin, an error, or a decision that isn't well
  * formed all leave it silent with exit 0, so the command runs as if Trail
  * weren't here. A check that can wedge every shell command is worse than none.

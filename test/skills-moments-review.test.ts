@@ -89,7 +89,7 @@ function promptHookCorrection(correction: string) {
   const b = promptBox("b4rev-wire");
   scratch.push(b.home);
   save(b, releaseSkill({ applies: WEBSHOP, trail: "s-7f3a2c", asks: "publish" }));
-  const run = (p: string, env = b.env) => promptSkills(payload(b, p), CWD, env, { track: () => {}, gate: gateFor(b) });
+  const run = (p: string, env = b.env) => promptSkills(payload(b, p), CWD, env, { gate: gateFor(b) });
   run("can you pull and publish 1.4.2");
   grow(b, [
     typedIn(b, "can you pull and publish 1.4.2", 0),

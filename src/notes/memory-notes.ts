@@ -15,8 +15,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { countBucket } from "../telemetry/contract.js";
-import { track } from "../telemetry/track.js";
 import { readJson, writeJsonAtomic } from "../util/state.js";
 import { sameRepoRoots, scrub } from "./cold-start.js";
 import { noteAuthor } from "./git-facts.js";
@@ -262,18 +260,5 @@ export async function finishMemoryRead(
     for (const c of candidates) offered.add(offerKey(c));
     writeJsonAtomic(offeredMark(repo), { at: Date.now(), offered: [...offered] }, true);
   }
-  const team = candidates.filter((c) => c.forTeam);
-  track(
-    "cold_start",
-    {
-      source: "memory",
-      outcome: chosen === null ? "cancelled" : candidates.length ? "found" : "none_found",
-      offered_bucket: countBucket(candidates.length),
-      picked_bucket: countBucket(saved.length),
-      team_offered_bucket: countBucket(team.length),
-      team_picked_bucket: countBucket(kept.filter((c) => c.forTeam).length),
-    },
-    { repo },
-  );
   return { saved, kept, cancelled: chosen === null };
 }

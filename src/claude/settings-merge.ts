@@ -99,9 +99,6 @@ function hookBlocks(command: (arg: string) => string): Record<string, Json[]> {
     PostToolUseFailure: [{ matcher: 'Bash', hooks: [{ type: 'command', command: hookCmd_('post-bash-fail'), timeout: 5 }] }],
     SessionStart: [{ hooks: [{ type: 'command', command: hookCmd_('session-start'), timeout: 10 }] }],
     Stop: [{ hooks: [{ type: 'command', command: hookCmd_('stop'), timeout: 10 }] }],
-    // Sends the telemetry queue in a detached child, so closing Claude isn't
-    // slowed. Not fired when the terminal is killed; session start sends what's left.
-    SessionEnd: [{ hooks: [{ type: 'command', command: hookCmd_('session-end'), timeout: 5 }] }],
   };
 }
 /**
@@ -180,6 +177,7 @@ export function mergeGraftSettings(
   );
 
   merged.hooks = { ...(merged.hooks ?? {}) };
+  dropRetiredEvents(merged.hooks, graftBlocks(undefined, name));
   for (const [event, blocks] of Object.entries(graftBlocks(undefined, name))) {
     const prior = Array.isArray(merged.hooks[event]) ? merged.hooks[event] : [];
     const foreign = prior.filter((e: Json) => !isGraftEntry(e)); // drop old Graft entries → idempotent
@@ -221,12 +219,23 @@ export function mergeGraftSettings(
 export function mergeGraftHooks(existing: Json, helpers: string): { merged: Json } {
   const merged: Json = { ...(existing ?? {}) };
   merged.hooks = { ...(merged.hooks ?? {}) };
+  dropRetiredEvents(merged.hooks, graftBlocks(helpers));
   for (const [event, blocks] of Object.entries(graftBlocks(helpers))) {
     const prior = Array.isArray(merged.hooks[event]) ? merged.hooks[event] : [];
     const foreign = prior.filter((e: Json) => !isGraftEntry(e));
     merged.hooks[event] = [...foreign, ...blocks];
   }
   return { merged };
+}
+
+/** Graft's entries under events it no longer writes (SessionEnd, which used to send the usage queue) come out too. */
+function dropRetiredEvents(hooks: Json, current: Record<string, Json[]>): void {
+  for (const [event, prior] of Object.entries(hooks)) {
+    if (event in current || !Array.isArray(prior)) continue;
+    const kept = prior.filter((e: Json) => !isGraftEntry(e));
+    if (kept.length) hooks[event] = kept;
+    else delete hooks[event];
+  }
 }
 
 /** Drop every fragment graft or trail wrote from a settings object, keeping the user's. */
