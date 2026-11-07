@@ -14,11 +14,15 @@ import { BRAND_ENV, graftNotice, pluginMode, trailHandoverLine } from '../src/br
 import { main, uncommittedDirective } from '../src/claude/hooks.js';
 import { noteAsk, noteSignals } from '../src/claude/note-signals.js';
 import { keptContext } from '../src/claude/start-init.js';
+import { savingsLine, savingsTurnNudge } from '../src/context/savings.js';
+import { nativeFallbackNotice } from '../src/graph/native.js';
+import { commitLines } from '../src/notes/credit.js';
 import { editOverlapDirective } from '../src/notes/edit-overlap.js';
 import { ensureRepoHome } from '../src/notes/home.js';
 import { writeNote } from '../src/notes/notes.js';
 import { writeStamp } from '../src/upkeep.js';
-import { tmpRepo } from './helpers.js';
+import { claudeProjectDir } from '../src/notes/session-cost.js';
+import { homeEnv, tmpRepo } from './helpers.js';
 
 // A scratch home, so nothing here can reach the real one.
 const HOME = mkdtempSync(join(tmpdir(), 'plugin-mode-home-'));
@@ -252,7 +256,7 @@ test("what the person kept on trail init's screen is named without an order to s
   assert.match(await inMode(false, () => keptContext(line)), /tell them once, at the start of your first reply: "kept from trail init in your terminal: release-npm/);
 });
 
-/* ---- notices ---- */
+/* ---- text with no hook behind it: notices, lines, footers ---- */
 
 test('no rename notice and no handover line telling anyone to graft upgrade', async () => {
   const env = { PATH: '', [BRAND_ENV]: 'graft' };
@@ -264,4 +268,119 @@ test('no rename notice and no handover line telling anyone to graft upgrade', as
   assert.match(notice, /graft is now trail/);
   assert.match(notice, /run graft upgrade to get the trail command too/);
   assert.match(trailHandoverLine({ env, home: HOME })!, /Tell the user once, in a line at the end of your first reply, that `graft upgrade` adds it/);
+});
+
+test("a tool's tokens-saved footer keeps its numbers and loses the ask to close the reply with a tally", async () => {
+  const body = 'x'.repeat(400);
+  const saved = { files: 1, baselineChars: 40_000 };
+  const plugin = await inMode(true, () => savingsLine(body, saved));
+  assert.equal(plugin, '[trail] tokens saved ≈ 9,900 (99%) — this output ≈ 100 tok vs reading the 1 file(s) it covers whole ≈ 10,000 tok (estimate).');
+  assert.equal(await inMode(true, () => savingsTurnNudge(1200)), '');
+  const old = await inMode(false, () => savingsLine(body, saved));
+  assert.match(old, /\(estimate\)\. At the end of your reply, tell the user the total trail tokens saved this turn — sum each such line across your trail calls — e\.g\. "🌱 trail saved ~N tokens this turn"\.$/);
+});
+
+test('the lines about committing a learning say who gets it and when, in plain words', async () => {
+  const plugin = await inMode(true, () => [commitLines({}, [], 'repo'), commitLines({ cost: { tokens: 90_000 } }, ['Anay', 'Rushil'], 'files')]);
+  assert.deepEqual(plugin[0], { committed: "· committed: teammates' agents get what you learned", uncommitted: "· not committed yet: teammates' agents get what you learned once it is committed" });
+  assert.deepEqual(plugin[1], { committed: '· committed: Anay and Rushil work in this part of the codebase, and their agents get what you learned', uncommitted: '· not committed yet: Anay and Rushil work in this part of the codebase, and their agents get what you learned once it is committed' });
+  for (const l of plugin.flatMap((p) => [p.committed, p.uncommitted])) assertQuiet(l, l);
+  assert.equal((await inMode(false, () => commitLines({}, [], 'repo'))).uncommitted, "🌱 Commit what you learned and your teammates' agents get to a PR 3x faster");
+});
+
+test("a build's note about languages it could only parse basically says so and leaves the npm install to the plugin", async () => {
+  const fallback = { languages: ['rust'], packages: ['tree-sitter-rust'] };
+  assert.equal(await inMode(true, () => nativeFallbackNotice(fallback, '@trailhq/trail-code')), "⚠ rust: basic parsing only, its parser didn't load.");
+  assert.equal(await inMode(false, () => nativeFallbackNotice(fallback, '@trailhq/trail-code')), "⚠ rust: basic parsing only, its parser didn't load. To fix: npm install -g --allow-scripts=tree-sitter-rust @trailhq/trail-code");
+});
+
+/* ---- the commands ---- */
+
+/** Runs trail from this checkout under a scratch home; the repo goes in `args`. */
+function trail(args: string[], home: string, plugin: boolean, input = '', env: NodeJS.ProcessEnv = {}) {
+  const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), join(process.cwd(), 'src', 'bin', 'trail.ts'), ...args], {
+    cwd: process.cwd(),
+    input,
+    encoding: 'utf8',
+    env: { ...process.env, ...homeEnv(home), TRAIL_HOME: join(home, '.trail'), DO_NOT_TRACK: '1', CLAUDECODE: undefined, CLAUDE_PROJECT_DIR: undefined, TRAIL_INVOKED_AS: undefined, TRAIL_PLUGIN: plugin ? '1' : undefined, ...env },
+  });
+  return { status: r.status, out: r.stdout, err: r.stderr };
+}
+
+const NOTE_BODY = [
+  '## Decided',
+  "Rotate each box in `NormalizeBox` by its own page's `/Rotate` before scaling.",
+  '',
+  '## Tried and ruled out',
+  '- Rotating the image before OCR. Works, but doubles latency on long files.',
+  '',
+  '## Watch out',
+  '`/Rotate` can be 270 on a single page inside an otherwise upright file.',
+].join('\n');
+
+/** A repo with a file a teammate (Anay) changed last and an uncommitted change of Priya's, set up for trail. */
+function noteRepo(home: string): string {
+  const d = tmpRepo('plugin-note');
+  const git = (args: string[]) => spawnSync('git', args, { cwd: d });
+  mkdirSync(join(d, 'internal', 'ocr'), { recursive: true });
+  const bbox = (ret: string) => writeFileSync(join(d, 'internal', 'ocr', 'bbox.go'), `package ocr\n\nfunc NormalizeBox(x float64, rotate int) float64 {\n\treturn ${ret}\n}\n`);
+  bbox('x');
+  git(['init', '-q']);
+  git(['config', 'user.name', 'Priya Raman']);
+  git(['config', 'user.email', 'p@example.com']);
+  git(['add', '-A']);
+  git(['-c', 'commit.gpgsign=false', 'commit', '-qm', 'init']);
+  bbox('x * 1');
+  git(['-c', 'commit.gpgsign=false', '-c', 'user.name=Anay Shah', '-c', 'user.email=anay@acme.test', 'commit', '-qam', 'scale']);
+  bbox('-x');
+  assert.equal(trail(['init', d, '--agents', 'claude', '--yes', '--no-global', '--no-build'], home, true).status, 0);
+  return d;
+}
+
+test('trail note says what was saved and that it is uncommitted, and does not ask the agent to close the reply with a line', () => {
+  const home = mkdtempSync(join(tmpdir(), 'plugin-note-home-'));
+  const d = noteRepo(home);
+  const saved = trail(['note', d, '--title', 'Bbox coordinates are off on rotated PDFs', '--minutes', '12', '--tokens', '9600'], home, true, NOTE_BODY);
+  assert.equal(saved.status, 0, saved.err);
+  assertQuiet(saved.out, 'trail note');
+  assert.match(saved.out, /^✓ added to this repo · \.trail\/learnings\/\d{4}-\d{2}-\d{2}-bbox-coordinates-are-off-on-rotated-priya\.md\n· id l-[0-9a-f]+\n· the next session that touches bbox\.go starts from this\n· not committed yet: Anay works in this part of the codebase, and their agents get what you learned once it is committed · git add \.trail\/learnings\/\S+\.md\n$/);
+
+  const mine = trail(['note', d, '--title', 'Keep the dry run quiet on stderr', '--personal'], home, true, '## Decided\nThe dry run of `NormalizeBox` prints nothing.\n\n## Watch out\nBecause stdout is parsed.\n');
+  assert.equal(mine.status, 0, mine.err);
+  assertQuiet(mine.out, 'trail note --personal');
+  assert.match(mine.out, /· just for you: kept on this machine, out of the repo\n$/);
+
+  // The same command with the variable unset still asks for the closing lines.
+  const other = noteRepo(home);
+  const old = trail(['note', other, '--title', 'Bbox coordinates are off on rotated PDFs', '--minutes', '12', '--tokens', '9600'], home, false, NOTE_BODY);
+  assert.equal(old.status, 0, old.err);
+  assert.match(old.out, /· the next session that touches bbox\.go starts from this, and gets to a PR 3x faster/);
+  assert.match(old.out, /\[trail\] Close your reply with one line, word for word\. If this learning is committed by the end of your turn: 📝 Committed · Anay works in this part of the codebase/);
+});
+
+test('trail init, run by an agent, says the team learnings are uncommitted and leaves the question to ask about them to the plugin', () => {
+  const home = mkdtempSync(join(tmpdir(), 'plugin-init-home-'));
+  const make = () => {
+    const d = tmpRepo('plugin-init');
+    spawnSync('git', ['init', '-q'], { cwd: d });
+    mkdirSync(join(d, 'src'), { recursive: true });
+    writeFileSync(join(d, 'src', 'retry.ts'), 'export const MAX = 4;\n');
+    const project = claudeProjectDir(d, home);
+    mkdirSync(join(project, 'memory'), { recursive: true });
+    writeFileSync(join(project, 'memory', 'retry.md'), "---\nname: retry-budget\ndescription: Retries stay at 4 because the gateway times out at 30 s\ntype: project\n---\n\nKeep MAX at 4 in src/retry.ts.\n\n**Why:** 4 tries × 7 s fit under the gateway's 30 s.\n");
+    return d;
+  };
+  const init = (d: string, plugin: boolean) => trail(['init', d, '--agents', 'claude', '--no-build', '--no-global', '--mine-sessions'], home, plugin, '', { CLAUDECODE: '1' });
+  const plugin = init(make(), true);
+  assert.equal(plugin.status, 0, plugin.err);
+  assertQuiet(plugin.err, 'trail init');
+  assert.match(plugin.err, /^· not committed yet: teammates' agents get what you learned once it is committed$/m);
+  assert.match(plugin.err, /^· commit \.claude\/settings\.json and \.trail\/ once: after that, teammates' Claude reads your learnings$/m);
+  assert.match(plugin.err, /^→ 1 team learning in \.trail\/learnings\/ isn't committed yet\.$/m);
+
+  const old = init(make(), false);
+  assert.equal(old.status, 0, old.err);
+  assert.match(old.err, /^→ 1 team learning in \.trail\/learnings\/ isn't committed yet\. Ask the user: "Commit it so your teammates' Claude starts from it\? \(yes \/ no\)"$/m);
+  assert.match(old.err, /^🌱 Commit what you learned and your teammates' agents get to a PR 3x faster$/m);
+  assert.match(old.err, /once: after that, teammates' Claude reads your learnings even before they install trail$/m);
 });

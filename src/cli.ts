@@ -27,7 +27,7 @@ import type { Retraction } from "./hosts/retract.js";
 import type { planInit as PlanInit } from "./hosts/plan.js";
 import { agentList, autoSelection, autoSummary } from "./hosts/auto.js";
 import { checkoutRoot, ensureRepoHome, keepsNotes, noteCount, rememberRepo, repoName, repoPlace, shownPath } from "./notes/home.js";
-import { brand, cmd, graftNotice, strandedRepoNotice, tag } from "./brand.js";
+import { brand, cmd, graftNotice, pluginMode, strandedRepoNotice, tag } from "./brand.js";
 import { branchDiff } from "./check/branch-diff.js";
 import { committedAtBase, learningsAtBase, teammateEdits, withBaseLearnings } from "./check/learning-edits.js";
 import { contextDirFor } from "./context/node-file.js";
@@ -1167,7 +1167,7 @@ async function runNoteCommand(repo: string, opts: NoteOptions): Promise<void> {
     const reading = tokensLabel(readingTokens(note)).replace(" tokens", "");
     console.log(`· this ${took.replace(" to work out", " to figure out")}. the next session${first} gets it for ${reading}`);
   } else if (note.scope !== "personal") {
-    console.log(`· the next session${first} starts from this, and gets to a PR ${PR_SPEEDUP}`);
+    console.log(`· the next session${first} starts from this${pluginMode() ? "" : `, and gets to a PR ${PR_SPEEDUP}`}`);
   }
   // Learnings about the same files, from someone else: this one builds on theirs.
   const files = new Set(touches.map((t) => t.split("#")[0]));
@@ -1182,7 +1182,8 @@ async function runNoteCommand(repo: string, opts: NoteOptions): Promise<void> {
     // Who else works on these files, for the case for committing it.
     const lines = commitLines(note, teammatesOn(repo, [...files].filter((f): f is string => !!f)));
     console.log(`${lines.uncommitted} · git add ${repoSaved.map(notePlace).join(" ")}`);
-    if (!process.stdout.isTTY && TRAIL)
+    // Plugin mode says what was saved and what is uncommitted (above), and leaves the closing line out.
+    if (!process.stdout.isTTY && TRAIL && !pluginMode())
       console.log(
         `[trail] Close your reply with one line, word for word. If this learning is committed by the end of your turn: ${lines.committed}\n` +
           `  If it isn't: ${commitAsk(note.title, about)}\n` +
@@ -1190,7 +1191,7 @@ async function runNoteCommand(repo: string, opts: NoteOptions): Promise<void> {
       );
   } else {
     console.log("· just for you: kept on this machine, out of the repo");
-    if (!process.stdout.isTTY && TRAIL) console.log(`[trail] Close your reply with this line, word for word: ${PERSONAL_SAVED_LINE}`);
+    if (!process.stdout.isTTY && TRAIL && !pluginMode()) console.log(`[trail] Close your reply with this line, word for word: ${PERSONAL_SAVED_LINE}`);
   }
   for (const t of targets) rememberRepo(t.dir);
 }
@@ -1465,7 +1466,7 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
       else if (tops.length)
         console.error(
           TRAIL
-            ? `· commit ${tops.slice(0, 5).join(" and ")}${tops.length > 5 ? ` +${tops.length - 5} more` : ""} once: after that, teammates' Claude reads your learnings even before they install trail`
+            ? `· commit ${tops.slice(0, 5).join(" and ")}${tops.length > 5 ? ` +${tops.length - 5} more` : ""} once: after that, teammates' Claude reads your learnings${pluginMode() ? "" : " even before they install trail"}`
             : `· commit ${tops.slice(0, 5).join(" ")}${tops.length > 5 ? ` +${tops.length - 5} more` : ""} to share it: graft/ stays local and git-ignored`,
         );
     }
@@ -1486,9 +1487,11 @@ async function runInitCommand(dir: string, opts: InitOptions): Promise<{ ids: st
     );
     // Run by an agent, not a person: the last line tells it to ask about the
     // commit, since the person never saw the picker and Claude Code folds the rest.
+    // In plugin mode it only says they are uncommitted: what to ask, if anything, is the plugin's.
     if (teamSaved && !process.stderr.isTTY)
       console.error(
-        `→ ${teamSaved} team learning${teamSaved === 1 ? "" : "s"} in ${LEARNINGS_DIR}/ ${teamSaved === 1 ? "isn't" : "aren't"} committed yet. Ask the user: "Commit ${teamSaved === 1 ? "it" : `the ${teamSaved}`} so your teammates' Claude starts from ${teamSaved === 1 ? "it" : "them"}? (yes / no)"`,
+        `→ ${teamSaved} team learning${teamSaved === 1 ? "" : "s"} in ${LEARNINGS_DIR}/ ${teamSaved === 1 ? "isn't" : "aren't"} committed yet.` +
+          (pluginMode() ? "" : ` Ask the user: "Commit ${teamSaved === 1 ? "it" : `the ${teamSaved}`} so your teammates' Claude starts from ${teamSaved === 1 ? "it" : "them"}? (yes / no)"`),
       );
     // Sorted so `claude,cursor` and `cursor,claude` aggregate as one value.
     return { ids, laptop: laptop ?? ids };

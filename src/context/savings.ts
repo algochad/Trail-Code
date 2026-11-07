@@ -14,7 +14,7 @@
  */
 import type { GraphV1 } from '../graph/types.js';
 import { formatDollars } from './price.js';
-import { brand, tag } from "../brand.js";
+import { brand, pluginMode, tag } from "../brand.js";
 
 export interface Savings {
   /** How many source files the baseline covers. */
@@ -90,6 +90,8 @@ export function setInputRate(usdPerMtok: number | null): void {
  * `hasSavingsTally` (claude/tally.ts) recognises, so adding money here does not
  * quietly zero the reported-turns metric. */
 export function savingsTurnNudge(savedTokens: number): string {
+  // Plugin mode: the footer's numbers stay; the ask to close the reply with a tally does not.
+  if (pluginMode()) return '';
   const b = brand();
   const sum = ` — sum each such line across your ${b} calls — e.g. `;
   if (inputRateUsdPerMtok === null || savedTokens <= 0) {

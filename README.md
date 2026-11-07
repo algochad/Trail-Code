@@ -15,6 +15,7 @@
 > - `trail hook <event>` is what those hooks run. It reads the hook payload on stdin and always exits 0.
 > - `trail init --plugin` sets up the repo for a plugin that owns the hooks and the skill: nothing is written under `~/.claude`. `trail skill export --out DIR` writes the skill file for the plugin to ship.
 > - `trail init --no-hooks --no-statusline` sets up `.trail/`, the code map and the skill file without writing any Claude Code settings. See [Letting a plugin own the hooks](#letting-a-plugin-own-the-hooks).
+> - `TRAIL_PLUGIN=1` is plugin mode: the text trail puts in the model's context stops fighting the plugin around it. See [Letting a plugin own the hooks](#letting-a-plugin-own-the-hooks).
 >
 > Also fixed: every `git diff`, `show` and `log` the code runs ignores your own git config (`diff.mnemonicPrefix`, `diff.colorMoved`, `color.ui` and the like), which used to break `trail blast` and `trail check` on some setups.
 
@@ -615,6 +616,8 @@ trail hooks print > /tmp/trail-hooks.json
 The output is the value of the `hooks` key of a plugin's `hooks/hooks.json`: the same events (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`), matchers and timeouts (in seconds) that `trail init` writes into settings, with every command `trail hook <event> || exit 0`. To make the file: `trail hooks print | jq '{hooks: .}' > hooks/hooks.json`.
 
 `trail hook <event>` reads the hook payload on stdin, answers on stdout the way the host expects, and exits 0 whatever happens (bad input, an unknown event, a missing project folder), so a broken hook never stops a turn. The `|| exit 0` covers the one case it can't: `trail` not being on the machine.
+
+**Plugin mode.** A plugin sets `TRAIL_PLUGIN=1` on every `trail` call it makes. Then the text trail puts in the model's context (hook output, and the output of `trail note`, `trail init` and the retrieval commands) says what is true and drops what would fight the plugin's own: lines the model is told to close its reply with or to say word for word, credit and tally lines (`📝 Started from…`, `🌱 trail saved…`), install and upgrade nudges, "3x faster", and "reach for trail first". Session start and the prompt hook name `ctx where <thing>` as the first call for finding code, and call the listed starting points hints from the code map. Which learning applies, that learnings are uncommitted, how to save one (`trail note`, by the main agent) and `trail check` before a commit or PR stay. The learned-skills feature keeps its own text, since its offers are checked against what the agent says: `trail skills off` turns it off. With the variable unset, every text reads as before.
 
 A hook starts a fresh process per call, so `trail hook` is built to start light: it is answered before the CLI loads, each event imports only what it needs, and V8's compile cache lives in `~/.trail/cache/node-compile`. `node scripts/bench-hooks.mjs` (after `npm run build`) times every event ten times with `{}` and with a realistic payload against a throwaway repo and HOME, and prints median and p95.
 

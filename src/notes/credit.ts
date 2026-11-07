@@ -4,6 +4,7 @@
  * and the lines that close a reply after a team learning is saved.
  */
 import type { Note } from "./notes.js";
+import { pluginMode } from "../brand.js";
 
 /** `~9.6k tokens`, `~600 tokens`. */
 export function tokensLabel(n: number): string {
@@ -54,6 +55,11 @@ export function commitLines(
   // "an 80k-token", "an 11k-token": said aloud, they start with a vowel.
   const start = short ? `${/^8|^1[18]k$/.test(short) ? "an" : "a"} ${short}-token head start` : null;
   const place = where === "files" ? "this part of the codebase" : "this repo";
+  if (pluginMode()) {
+    // Plugin mode: what is true of the learning, with no emoji, no claim about speed, nothing to say aloud.
+    const who = teammates.length ? `${namesLabel(teammates)} ${teammates.length === 1 ? "works" : "work"} in ${place}, and their agents` : "teammates' agents";
+    return { committed: `· committed: ${who} get what you learned`, uncommitted: `· not committed yet: ${who} get what you learned once it is committed` };
+  }
   if (!teammates.length) {
     return start
       ? {
@@ -85,6 +91,8 @@ export function commitLines(
  */
 export function setupCommitLine(teammates: string[]): string {
   const ask = "Commit .trail/ and .claude/settings.json once";
+  // Plugin mode: no emoji, no "even before they install trail".
+  if (pluginMode()) return teammates.length ? `${namesLabel(teammates)} ${teammates.length === 1 ? "works" : "work"} in this repo. ${ask} so their Claude can read your learnings` : `${ask} so teammates' Claude can read your learnings`;
   if (!teammates.length) return `🌱 ${ask}, and your teammates' Claude starts from your learnings, even before they install trail`;
   const work = teammates.length === 1 ? "works" : "work";
   return `🌱 ${namesLabel(teammates)} ${work} in this repo. ${ask}, and their Claude starts from your learnings, even before they install trail`;

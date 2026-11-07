@@ -18,6 +18,7 @@
 import { createRequire } from "node:module";
 import type Parser from "tree-sitter";
 import type { Language } from "./extract.js";
+import { pluginMode } from "../brand.js";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -174,6 +175,8 @@ export function nativeFallbackNotice(fallback: NativeFallback | undefined, packa
   const langs = fallback.languages.join(", ");
   const what = fallback.languages.length === 1 ? "its parser didn't load" : "their parsers didn't load";
   const allow = fallback.packages.length > 0 ? `--allow-scripts=${fallback.packages.join(",")} ` : "";
+  // Plugin mode: the plugin owns the install, so the notice says what happened and not how to install.
+  if (pluginMode()) return `⚠ ${langs}: basic parsing only, ${what}.`;
   return `⚠ ${langs}: basic parsing only, ${what}. To fix: npm install -g ${allow}${packageName}`;
 }
 
