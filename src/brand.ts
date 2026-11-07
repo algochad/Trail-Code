@@ -45,6 +45,19 @@ export function tag(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /**
+ * Plugin mode: a Claude Code plugin wraps this tool and sets `TRAIL_PLUGIN=1` on every call it makes.
+ *
+ * The text this tool puts in the model's context (hook output, and CLI output meant for the model) then leaves out
+ * what would fight the plugin's own: lines the model is told to say word for word, credit and tally lines, install
+ * and upgrade nudges, and "reach for trail first". The facts stay (which learning applies, that one is uncommitted).
+ * With the variable unset, every text is as it always was. Here rather than in a file of its own because the
+ * PreToolUse fast path loads this file and no other (tests pin its list).
+ */
+export function pluginMode(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.TRAIL_PLUGIN === "1";
+}
+
+/**
  * The commands whose trail spelling is not just `graft` → `trail`, longest
  * prefix first. `graft check` gave its name to the team check, and `graft
  * stats` became `trail status`.
@@ -191,7 +204,7 @@ export interface NoticeInput {
 export function graftNotice(input: NoticeInput): string | null {
   const env = input.env ?? process.env;
   if (brand(env) !== "graft" || !input.tty) return null;
-  if (env.CLAUDECODE !== undefined || env.CI || env.GRAFT_NO_RENAME_NOTICE) return null;
+  if (env.CLAUDECODE !== undefined || env.CI || env.GRAFT_NO_RENAME_NOTICE || pluginMode(env)) return null;
   const now = input.now ?? Date.now();
   const path = noticeStampPath(input.home);
   try {
@@ -263,7 +276,7 @@ export function handoverStampPath(home: string = userHome()): string {
  */
 export function trailHandoverLine(input: { env?: NodeJS.ProcessEnv; home?: string; now?: number } = {}): string | null {
   const env = input.env ?? process.env;
-  if (brand(env) !== "graft" || env.CI || env.GRAFT_NO_RENAME_NOTICE || trailOnPath(env)) return null;
+  if (brand(env) !== "graft" || env.CI || env.GRAFT_NO_RENAME_NOTICE || pluginMode(env) || trailOnPath(env)) return null;
   const now = input.now ?? Date.now();
   const path = handoverStampPath(input.home);
   try {

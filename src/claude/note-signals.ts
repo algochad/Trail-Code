@@ -27,6 +27,7 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { trailOwnPath } from '../notes/git-facts.js';
 import { NOTE_CALL } from '../notes/session-cost.js';
+import { pluginMode } from '../brand.js';
 
 export type NoteSignalKind = 'fixed' | 'corrected' | 'undone' | 'chose' | 'overrode' | 'shipped' | 'explored';
 
@@ -366,7 +367,9 @@ export function noteSignals(jsonl: string, repo: string): NoteSignal[] {
 }
 
 const SAVE = '`trail note --title "<the decision in plain words a teammate understands, no file names>"`';
-const CLOSE = 'Put files, commands and values in the body under "In the code:". Sections: ## Decided, ## Tried and ruled out, ## Watch out. A summary, never a transcript, nothing secret. Then finish as trail\'s output asks.';
+const CLOSE = 'Put files, commands and values in the body under "In the code:". Sections: ## Decided, ## Tried and ruled out, ## Watch out. A summary, never a transcript, nothing secret.';
+/** What `trail note` asks for after a save: a line to close the reply with. Not in plugin mode, which asks for none. */
+const FINISH = ' Then finish as trail\'s output asks.';
 
 /** What the agent is told: the sign first, since Claude Code folds long hook output to its first lines. */
 export function noteAsk(s: NoteSignal): string {
@@ -385,5 +388,5 @@ export function noteAsk(s: NoteSignal): string {
               : s.kind === 'explored'
                 ? `${s.what} If it found where something lives or why it works the way it does, and the code won't say so plainly, save it: ${SAVE}. ${skip}`
                 : `${s.what} If the session found what the diff won't tell the next person (a cause, a dropped approach, how something is done here), save it now so it ships with the change: ${SAVE}. ${skip}`;
-  return `[trail] ${first}\n${CLOSE}`;
+  return `[trail] ${first}\n${CLOSE}${pluginMode() ? '' : FINISH}`;
 }

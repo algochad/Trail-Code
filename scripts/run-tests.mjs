@@ -50,11 +50,12 @@ const gitEnv = {
 const runTmp = mkdtempSync(join(tmpdir(), "trail-test-run-"));
 // A fresh HOME for the run too, so no test can write the real ~/.trail, ~/.claude or ~/.gitconfig (and none reads them).
 // Variables that would point Claude Code's or Codex's folders at the real ones are dropped, so each test's own HOME rules.
+// So is TRAIL_PLUGIN: plugin mode (pluginMode in src/brand.ts) changes the texts the other tests pin; its own tests set it themselves.
 const runHome = join(runTmp, "home");
 mkdirSync(runHome, { recursive: true });
 const tmpEnv = { TMPDIR: runTmp, TEMP: runTmp, TMP: runTmp };
 const homeEnv = { HOME: runHome, USERPROFILE: runHome };
-for (const k of ["TRAIL_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME"]) delete process.env[k];
+for (const k of ["TRAIL_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "TRAIL_PLUGIN"]) delete process.env[k];
 
 // A graft repo moves to trail when a session opens on a machine with the trail
 // command, so a contributor who has trail installed would see test repos move.

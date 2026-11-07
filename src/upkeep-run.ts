@@ -3,6 +3,7 @@
  * helper scripts, status lines or skills. Only `trail init` (or another command the person runs) does.
  */
 import { compareVersions, readStamp, wiredHostIds } from './upkeep.js';
+import { pluginMode } from './brand.js';
 
 export interface UpkeepResult {
   /** Lines worth showing the agent/user, already formatted. Usually empty. */
@@ -18,6 +19,8 @@ export interface UpkeepResult {
  */
 export function runUpkeep(repo: string, current: string): UpkeepResult {
   const lines: string[] = [];
+  // Plugin mode: the plugin owns the hooks, and `trail init` would add a second set beside them.
+  if (pluginMode()) return { lines };
   try {
     const stamp = readStamp(repo);
     if (stamp && compareVersions(stamp.version, current) < 0 && wiredHostIds(repo).length > 0)

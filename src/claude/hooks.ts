@@ -17,7 +17,7 @@ import { runningVersion, wiredHostIds } from '../upkeep.js';
 import { handleStopEvent } from './stop.js';
 import { main as preBashMain } from './pre-bash.js';
 import { classifyToolUse, commandInvokesGraft, isMcpToolName, isGraftMcpTool, parseSavings, recordToolUse, type ToolKind } from './session-metrics.js';
-import { brand, tag, trailHandoverLine } from '../brand.js';
+import { brand, pluginMode, tag, trailHandoverLine } from '../brand.js';
 import { adoptBrand, beginHook } from './hook-prelude.js';
 import { keepsNotes, noteCounts, repoPlace, type NoteCounts } from '../notes/home.js';
 import { branchesStale, overlapMark, readBranchCache, refreshBranches, SESSION_REFRESH_MS } from '../notes/branches.js';
@@ -275,12 +275,16 @@ export function uncommittedDirective(dir: string, now = Date.now()): string {
     const mark = join(cacheDir(place.checkout), 'trail-uncommitted-said.json');
     if (now - (readJson<{ at?: number }>(mark)?.at ?? 0) < DAY_MS) return '';
     writeJsonAtomic(mark, { at: now }, true);
+    // Plugin mode: the fact, without the line to say word for word.
     if (setup) {
+      const fact = `${tag()} trail's shared setup here (.trail/ and .claude/settings.json) isn't committed yet, so teammates' Claude can't read the learnings.`;
+      if (pluginMode()) return `${fact}\n`;
       const line = setupCommitLine(teammatesOn(place.checkout));
-      return `${tag()} trail's shared setup here (.trail/ and .claude/settings.json) isn't committed yet, so teammates' Claude can't read the learnings. Say so once, at the end of your first reply, with this line, word for word: ${line}\n`;
+      return `${fact} Say so once, at the end of your first reply, with this line, word for word: ${line}\n`;
     }
-    const line = commitLines({}, teammatesOn(place.checkout), 'repo').uncommitted;
     const them = n === 1 ? "learning added to this repo (in .trail/learnings/) isn't committed yet, so no teammate's agent has it" : "learnings added to this repo (in .trail/learnings/) aren't committed yet, so no teammate's agent has them";
+    if (pluginMode()) return `${tag()} ${n} ${them}.\n`;
+    const line = commitLines({}, teammatesOn(place.checkout), 'repo').uncommitted;
     return `${tag()} ${n} ${them}. Say so once, at the end of your first reply, with this line, word for word: ${line}\n`;
   } catch {
     return '';
