@@ -21,7 +21,7 @@ import { matter } from "../util/front-matter.js";
 import type { GraphV1, NodeV1 } from "./types.js";
 import { CACHE_DIR, readNodes } from "../context/node-file.js";
 import { GRAPH_DIR } from "./write.js";
-import { inBrand } from "../brand.js";
+import { inBrand, pluginMode } from "../brand.js";
 
 const INDEX_FILE = "INDEX.md";
 /** Where a root-level file card goes when `graft/<stem>.md` is already a concept
@@ -215,7 +215,17 @@ export function writeCards(graph: GraphV1, outDir: string): CardStats {
  */
 export function writeIndex(outDir: string, files: CardFileInfo[]): void {
   // Spelled by the name that built it: a trail-only machine has no `graft` to run.
-  const lines: string[] = [
+  const lines: string[] = pluginMode()
+    ? [
+        // Under the agents-kit plugin the entry point is `ctx where`, not grep or `trail ask`.
+        "# repo map",
+        "",
+        "Small markdown nodes summarising this repo; each carries prose plus exact `file:line`. For orientation only:",
+        "to find code, start with `ctx where <task>`, which returns the code and the team's learnings on it. Edges (who calls",
+        "what) are not in these files: `ctx impact <file>` or `trail callers <symbol>` reads them.",
+        "",
+      ]
+    : [
     "# graft — repo map",
     "",
     "Small markdown nodes summarising this repo. `grep` any term, symbol, or",
@@ -230,7 +240,7 @@ export function writeIndex(outDir: string, files: CardFileInfo[]): void {
     "as the `graft` CLI everywhere else. Edges — who calls what — live only in the",
     "graph, not in these files: `graft callers <symbol>` is the only way to read them.",
     "",
-  ].map((l) => inBrand(l));
+  ].map((l) => (pluginMode() ? l : inBrand(l)));
 
   const concepts = readNodes(outDir).sort((a, b) => a.slug.localeCompare(b.slug));
   if (concepts.length) {

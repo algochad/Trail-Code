@@ -125,6 +125,17 @@ test('session start in plugin mode carries no learned-skills intro', async () =>
   assert.doesNotMatch(plugin, /keeps commands that worked here as skills|trail skills (add|lesson|update)|trail keep/);
 });
 
+test('the repo map header points at ctx where, not grep or trail ask, in plugin mode only', async () => {
+  const { writeIndex } = await import('../src/graph/cards.js');
+  const { readFileSync } = await import('node:fs');
+  const out = (plugin: boolean) => inMode(plugin, async () => { const d = mkdtempSync(join(tmpdir(), 'idx-')); writeIndex(d, []); return readFileSync(join(d, 'INDEX.md'), 'utf8'); });
+  const on = await out(true);
+  assert.match(on, /start with `ctx where <task>`/);
+  assert.doesNotMatch(on, /trail ask|graft ask|\bgrep\b|graft/i);
+  const off = await out(false);
+  assert.match(off, /run `(trail|graft) ask "<task>"`/);
+});
+
 /* ---- the hooks ---- */
 
 test('session start: ctx where is the first call; the learnings, how to save one and the check stay; no line to close the reply with', async () => {
