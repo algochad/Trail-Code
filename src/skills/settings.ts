@@ -17,6 +17,7 @@
 import type { TrailSkillSettings } from './types.js';
 import { isTestHome } from './host-facts.js';
 import { readJsonSafe, trailPath, withLock, writePrivate } from '../util/private-fs.js';
+import { pluginMode } from '../brand.js';
 
 export { isTestHome, labInteractive } from './host-facts.js';
 
@@ -163,6 +164,10 @@ export function noteGovernor(lastNine: Array<'yes' | 'no' | 'none'>, saidAt: str
 }
 
 export function skillsOn(env?: NodeJS.ProcessEnv): boolean {
+  // Under a plugin (TRAIL_PLUGIN=1) learned skills are off: their offers and notices ask the model to end its reply with
+  // scripted lines, which fights the plugin's own reply rules. TRAIL_PLUGIN_SKILLS=1 turns them back on.
+  const e = env ?? process.env;
+  if (pluginMode(e) && e.TRAIL_PLUGIN_SKILLS !== '1') return false;
   return readSettings(env).skills === 'on';
 }
 

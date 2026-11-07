@@ -110,6 +110,21 @@ test('pluginMode is on for TRAIL_PLUGIN=1 and nothing else', () => {
   assert.equal(pluginMode({}), false);
 });
 
+test('plugin mode turns learned skills off (their offers ask for scripted reply lines); TRAIL_PLUGIN_SKILLS=1 or no plugin mode keeps them', async () => {
+  const { skillsOn } = await import('../src/skills/settings.js');
+  const { skillsWired } = await import('../src/claude/skills-wiring.js');
+  const base = { ...process.env, TRAIL_PLUGIN: undefined, TRAIL_PLUGIN_SKILLS: undefined, TRAIL_NO_HOOKS: undefined };
+  assert.equal(skillsOn(base), true, 'default is on, as before');
+  assert.equal(skillsOn({ ...base, TRAIL_PLUGIN: '1' }), false);
+  assert.equal(skillsWired({ ...base, TRAIL_PLUGIN: '1' }), false);
+  assert.equal(skillsOn({ ...base, TRAIL_PLUGIN: '1', TRAIL_PLUGIN_SKILLS: '1' }), true);
+});
+
+test('session start in plugin mode carries no learned-skills intro', async () => {
+  const plugin = await inMode(true, () => hook('session-start', { session_id: 's-skills', source: 'startup', cwd: repo() }));
+  assert.doesNotMatch(plugin, /keeps commands that worked here as skills|trail skills (add|lesson|update)|trail keep/);
+});
+
 /* ---- the hooks ---- */
 
 test('session start: ctx where is the first call; the learnings, how to save one and the check stay; no line to close the reply with', async () => {
