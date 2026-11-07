@@ -128,10 +128,11 @@ test('session start in plugin mode carries no learned-skills intro', async () =>
 test('the repo map header points at ctx where, not grep or trail ask, in plugin mode only', async () => {
   const { writeIndex } = await import('../src/graph/cards.js');
   const { readFileSync } = await import('node:fs');
-  const out = (plugin: boolean) => inMode(plugin, async () => { const d = mkdtempSync(join(tmpdir(), 'idx-')); writeIndex(d, []); return readFileSync(join(d, 'INDEX.md'), 'utf8'); });
+  const out = (plugin: boolean) => inMode(plugin, async () => { const d = mkdtempSync(join(tmpdir(), 'idx-')); writeIndex(d, [{ card: 'src/a.ts.md', symbols: 2 } as any]); return readFileSync(join(d, 'INDEX.md'), 'utf8'); });
   const on = await out(true);
   assert.match(on, /start with `ctx where <task>`/);
-  assert.doesNotMatch(on, /trail ask|graft ask|\bgrep\b|graft/i);
+  assert.doesNotMatch(on, /trail ask|graft ask|\bgrep\b|graft|find`\/`ls/i);
+  assert.match(on, /1 per-file wiring cards mirror the source tree/);
   const off = await out(false);
   assert.match(off, /run `(trail|graft) ask "<task>"`/);
 });

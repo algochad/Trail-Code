@@ -256,7 +256,13 @@ export function writeIndex(outDir: string, files: CardFileInfo[]): void {
   if (files.length) {
     const withSymbols = files.filter((f) => f.symbols > 0).length;
     lines.push("## Files", "");
-    lines.push(
+    if (pluginMode()) {
+      lines.push(
+        `${files.length} per-file wiring cards mirror the source tree (${withSymbols} carry extracted symbols). They are not enumerated here:`,
+        "`ctx where <symbol or file>` lands on the code, and `trail skeleton <file>` shows a file's API.",
+        "",
+      );
+    } else lines.push(
       `${files.length} per-file wiring cards mirror the source tree under \`graft/\` ` +
         `(${withSymbols} carry extracted symbols). They are deliberately not enumerated here —`,
       "`grep` a symbol or `find`/`ls` a filename under `graft/` to land on the card for that file.",
